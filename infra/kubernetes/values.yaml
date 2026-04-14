@@ -1,0 +1,45 @@
+# Shared values for all DVC services
+global:
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+  namespace: dvc-system
+
+  kafka:
+    brokers: "kafka:29092"
+
+  postgres:
+    host: postgres
+    port: 5432
+    database: dvc_db
+    user: dvc_user
+    passwordSecretName: dvc-postgres-secret
+    passwordSecretKey: password
+
+  minio:
+    endpoint: "minio:9000"
+    accessKeySecretName: dvc-minio-secret
+    accessKeySecretKey: accessKey
+    secretKeySecretName: dvc-minio-secret
+    secretKeyKey: secretKey
+
+  keycloak:
+    url: "http://keycloak:8080"
+    realm: dvc
+
+  temporal:
+    address: "temporal:7233"
+    namespace: default
+    taskQueue: dvc-workflow
+
+  llm:
+    model: "gpt-4o-mini"
+    apiKeySecretName: dvc-llm-secret
+    apiKeySecretKey: apiKey
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

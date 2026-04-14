@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: {{ .Values.global.namespace | default "dvc-system" }}
+  labels:
+    app: notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: "dvc/notification-service:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3004
+          env:
+            - name: PORT
+              value: "3004"
+            - name: KAFKA_BROKERS
+              value: "{{ .Values.global.kafka.brokers }}"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.global.llm.apiKeySecretName }}"
+                  key: "{{ .Values.global.llm.apiKeySecretKey }}"
+            - name: LLM_MODEL
+              value: "{{ .Values.global.llm.model }}"
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: dvc-smtp-secret
+                  key: host
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: dvc-smtp-secret
+                  key: user
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: dvc-smtp-secret
+                  key: password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 15
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: {{ .Values.global.namespace | default "dvc-system" }}
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 3004
+      targetPort: 3004
+  type: ClusterIP

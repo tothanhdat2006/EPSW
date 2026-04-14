@@ -1,0 +1,37 @@
+{
+  "name": "@dvc/ingestion-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@dvc/logger": "workspace:*",
+    "@dvc/shared-types": "workspace:*",
+    "@dvc/database": "workspace:*",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "kafkajs": "^2.2.4",
+    "minio": "^8.0.3",
+    "uuid": "^11.0.3",
+    "jose": "^5.9.6",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.5.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2",
+    "rimraf": "^6.0.1",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/uuid": "^10.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.10.2"
+  }
+}
