@@ -3,7 +3,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useState } from 'react';
 import { CheckCircle, XCircle, Brain } from 'lucide-react';
-import { apiClient, type DocumentSummary } from '../api/client.ts';
+import { apiClient, documentsApi, type DocumentSummary } from '../api/client.ts';
 import PriorityBadge from '../components/PriorityBadge.tsx';
 
 interface DocumentWithSummary extends DocumentSummary {
@@ -23,10 +23,8 @@ export default function ApprovalView() {
   const { data, isLoading } = useQuery({
     queryKey: ['documents-for-approval'],
     queryFn: () =>
-      apiClient
-        .get<{ documents: DocumentWithSummary[] }>('/documents', {
-          params: { status: 'VALIDATED' },
-        })
+      documentsApi
+        .list({ status: 'VALIDATED' })
         .then((r) => r.data),
     refetchInterval: 15_000,
   });
@@ -41,7 +39,8 @@ export default function ApprovalView() {
     },
   });
 
-  const documents: DocumentWithSummary[] = data?.documents ?? [];
+  const documents: DocumentWithSummary[] =
+    (data?.documents as DocumentWithSummary[] | undefined) ?? [];
 
   return (
     <div className="p-8">
