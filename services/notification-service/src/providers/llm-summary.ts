@@ -5,7 +5,10 @@ let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
   if (!client) {
-    client = new OpenAI({ apiKey: config.llm.apiKey });
+    client = new OpenAI({
+      apiKey: config.llm.apiKey,
+      baseURL: config.llm.baseUrl,
+    });
   }
   return client;
 }

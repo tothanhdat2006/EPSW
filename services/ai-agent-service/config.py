@@ -23,7 +23,15 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://dvc_user:dvc_password@localhost:5432/dvc_db"
 
-    llm_model: str = "gpt-4o-mini"
+    # LLM (provider-agnostic)
+    # Supported providers:
+    # - "alibaba" / "dashscope" / "qwen": Alibaba Cloud DashScope OpenAI-compatible API
+    # - "openai": OpenAI API
+    llm_provider: str = "alibaba"
+    llm_model: str = "qwen-plus"
+    llm_api_key: Optional[str] = None
+    llm_base_url: Optional[str] = None
+    # Backward-compat (deprecated): prefer LLM_API_KEY
     openai_api_key: Optional[str] = None
     llm_temperature: float = 0.0
 
@@ -35,3 +43,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def resolve_llm_api_key() -> Optional[str]:
+    return settings.llm_api_key or settings.openai_api_key
+
+
+def resolve_llm_base_url() -> Optional[str]:
+    if settings.llm_base_url:
+        return settings.llm_base_url
+    provider = (settings.llm_provider or "").strip().lower()
+    if provider in {"alibaba", "dashscope", "qwen"}:
+        # DashScope OpenAI-compatible endpoint
+        return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    return None

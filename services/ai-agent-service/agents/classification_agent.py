@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import Optional
-from config import settings
+from config import settings, resolve_llm_api_key, resolve_llm_base_url
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 
@@ -39,10 +39,13 @@ Always return confidence as your certainty from 0-100."""),
 
 
 def _get_llm() -> ChatOpenAI:
+    api_key = resolve_llm_api_key()
+    base_url = resolve_llm_base_url()
     return ChatOpenAI(
         model=settings.llm_model,
         temperature=settings.llm_temperature,
-        api_key=settings.openai_api_key,
+        api_key=api_key,
+        base_url=base_url,
     )
 
 
