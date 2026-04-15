@@ -40,6 +40,8 @@ export default function DocumentReview() {
   }
 
   const extracted = (document as unknown as { extractedData?: Record<string, unknown> }).extractedData ?? {};
+  const extractedSummary =
+    typeof extracted['summary'] === 'string' ? extracted['summary'] : undefined;
 
   const fields: ExtractedField[] = [
     { key: 'documentType', label: 'Loại hồ sơ', value: extracted['documentType'], icon: Shield },
@@ -112,10 +114,10 @@ export default function DocumentReview() {
             </div>
           </div>
 
-          {extracted['summary'] && (
+          {extractedSummary && (
             <div className="bg-purple-50 rounded-xl border border-purple-200 p-5">
               <h2 className="text-sm font-semibold text-purple-700 mb-2">Tóm tắt nội dung</h2>
-              <p className="text-sm text-purple-800">{extracted['summary'] as string}</p>
+              <p className="text-sm text-purple-800">{extractedSummary}</p>
             </div>
           )}
         </div>
