@@ -7,7 +7,7 @@ export interface BaseEvent {
   version: '1.0';
 }
 
-// ── Ingestion Service → document-parser-service ──────────────────────────────
+// ── core-api ingestion phase ────────────────────────────────────────────────
 export interface DocumentReceivedEvent extends BaseEvent {
   type: 'document.received';
   payload: {
@@ -22,7 +22,7 @@ export interface DocumentReceivedEvent extends BaseEvent {
   };
 }
 
-// ── document-parser-service → ai-agent-service ───────────────────────────────
+// ── core-api parsing phase ──────────────────────────────────────────────────
 export interface DocumentParsedEvent extends BaseEvent {
   type: 'document.parsed';
   payload: {
@@ -35,7 +35,7 @@ export interface DocumentParsedEvent extends BaseEvent {
   };
 }
 
-// ── ai-agent-service → workflow-engine ───────────────────────────────────────
+// ── core-api AI analysis phase ──────────────────────────────────────────────
 export interface DocumentAnalyzedEvent extends BaseEvent {
   type: 'document.analyzed';
   payload: {
@@ -49,7 +49,7 @@ export interface DocumentAnalyzedEvent extends BaseEvent {
   };
 }
 
-// ── workflow-engine → notification-service ───────────────────────────────────
+// ── core-api validation phase ───────────────────────────────────────────────
 export interface DocumentValidatedEvent extends BaseEvent {
   type: 'document.validated';
   payload: {

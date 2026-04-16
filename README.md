@@ -1,166 +1,173 @@
-# DVC Workflow System
+# DVC AI Enterprise
 
-A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dịch vụ Công). Built as an Event-Driven Microservices monorepo.
+Hệ thống quản trị và xử lý thủ tục hành chính công (Dịch vụ Công - DVC), được tăng cường sức mạnh bởi AI (Qwen) với khả năng tự động bóc tách OCR+LLM và định tuyến quy trình nghiệp vụ.
 
-## Architecture
+## Tech Stack
 
-```
-Citizen / Staff
-      │
-      ▼
-API Gateway (NGINX)
-      │
-      ├─► ingestion-service (Node.js/TS)   → Kafka: document.received
-      │         └─ MinIO (raw file storage)
-      │
-Kafka ├─► document-parser-service (Python) → PyMuPDF + Tesseract OCR
-      │         └─ Kafka: document.parsed | hitl.manual_entry_required
-      │
-      ├─► ai-agent-service (Python/LangChain)
-      │         ├─ Classification (doc type, urgency, security level)
-      │         ├─ Extraction (structured JSON)
-      │         ├─ Redaction (PII removal → MinIO)
-      │         └─ Confidence Gate: <70% → hitl.pending-topic
-      │
-      ├─► workflow-engine (Temporal.io/TS)
-      │         ├─ Document state machine (RECEIVED→PUBLISHED)
-      │         ├─ Dynamic SLA timers (FLASH:30m, URGENT:2h, NORMAL:48h)
-      │         └─ Escalation on SLA breach → hitl.escalation
-      │
-      ├─► hitl-manager (Node.js/TS)
-      │         ├─ Creates HitlTask records
-      │         ├─ Keycloak ABAC role enforcement
-      │         └─ REST API for claim/resolve tasks
-      │
-      └─► notification-service (Node.js/TS)
-                ├─ Email (Nodemailer)
-                ├─ SMS gateway
-                ├─ Zalo OA API
-                └─ LLM summary / rejection translation
-```
+| Layer | Technology |
+|---|---|
+| Frontend | SvelteKit (Svelte 5), Shadcn-Svelte, Tailwind CSS V4 |
+| API / Runtime | Cloudflare Workers (via `@sveltejs/adapter-cloudflare`) |
+| Database | Cloudflare D1 (SQLite) + Drizzle ORM |
+| File Storage | Cloudflare R2 |
+| Caching | Upstash Redis |
+| AI Engine | Alibaba DashScope — Qwen models (OCR + LLM) |
+| Auth | Better Auth (email/password, session via D1) |
+| Fonts | Space Grotesk, Outfit, JetBrains Mono |
 
-## Quick Start (Local)
+## Local Development Setup
 
-### 1. Start Infrastructure
-```bash
-cd infra
-docker compose up -d
-```
-
-### 2. Initialize Keycloak Schema (Required once)
-```bash
-docker exec dvc-postgres psql -U dvc_user -d dvc_db -c "CREATE SCHEMA IF NOT EXISTS keycloak;"
-```
-
-### 3. Setup Database
-```bash
-# First time setup or if migrations diverge:
-pnpm --filter @dvc/database exec prisma migrate reset --force
-
-# Normal migration:
-pnpm --filter @dvc/database db:migrate:dev
-```
-
-### 4. Configure Environment
-Ensure you have a `.env` file in the root. **IMPORTANT**: Do not set a global `PORT` variable in the root `.env` as it will cause port conflicts between microservices. Each service will use its default port (3001, 3003, 3004) automatically.
-
-### 5. Running the System
-Run these in separate terminals:
-- **TypeScript Stack**: `pnpm dev`
-- **Document Parser**: `cd services/document-parser-service && uvicorn main:app --port 8001 --reload`
-- **AI Agent**: `cd services/ai-agent-service && uvicorn main:app --port 8002 --reload`
-
-## Integrate External JSON Data into Web Portal (qwen-rag)
-
-To load external datasets from:
-
-- `/home/phuc/Project/qwen-rag/data.json`
-- `/home/phuc/Project/qwen-rag/data_detail.json`
-
-run the sync pipeline from the monorepo root:
+### 1. Install dependencies
 
 ```bash
-pnpm sync:qwen-data
+cd app
+pnpm install
 ```
 
-This copies and validates JSON into:
+### 2. Configure environment variables
 
-- `apps/web-portal/public/mock/qwen-data.json`
-- `apps/web-portal/public/mock/qwen-data-detail.json`
+Create `app/.env` with the following:
 
-Then start web portal in local JSON mode:
+```env
+# Cloudflare (required only for remote DB push / production deploy)
+CLOUDFLARE_ACCOUNT_ID=""
+CLOUDFLARE_DATABASE_ID=""
+CLOUDFLARE_D1_TOKEN=""
+
+# Upstash Redis
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+
+# Cloudflare R2 (S3-compatible)
+R2_ACCESS_KEY_ID=""
+R2_SECRET_ACCESS_KEY=""
+R2_TOKEN_VALUE=""
+
+# AI: Alibaba DashScope / Qwen (OpenAI-compatible)
+LLM_PROVIDER="dashscope"
+LLM_API_KEY="sk-xxxxxxxxxxxxxxxx"
+LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# Better Auth
+BETTER_AUTH_SECRET="your-random-secret-here"
+ORIGIN="http://localhost:5173"
+```
+
+### 3. Generate auth schema (one-time)
+
+Better Auth needs to generate the user/session/account table definitions:
 
 ```bash
-pnpm --filter @dvc/web-portal dev:mock
+cd app
+pnpm auth:schema
 ```
 
-Or run sync + dev in one command:
+This writes `src/lib/server/db/auth.schema.ts`. The file is already exported from `schema.ts`.
+
+### 4. Start the dev server
 
 ```bash
-pnpm dev:web-portal:mock
+cd app
+pnpm dev
 ```
 
-In mock mode, web-portal reads local files first and falls back to API only when needed.
+On every start, the dev script automatically runs:
+```
+wrangler d1 execute epsw-db --local --file=scripts/schema-local.sql
+```
+This creates all D1 tables (idempotent — safe to run repeatedly) in Wrangler's **local** Miniflare D1 simulation before Vite boots.
 
-## Services
+> **Note**: Local dev uses a local SQLite file at `.wrangler/state/v3/d1/`. This is separate from your remote Cloudflare D1 database. No Cloudflare credentials are needed for local development.
 
-| Service | Port | Tech |
-|---|---|---|
-| api-gateway | 80 | NGINX |
-| ingestion-service | 3001 | Node.js/TypeScript |
-| document-parser-service | 8001 | Python/FastAPI |
-| ai-agent-service | 8002 | Python/FastAPI/LangChain |
-| workflow-engine | — (worker) | TypeScript/Temporal.io |
-| hitl-manager | 3003 | Node.js/TypeScript |
-| notification-service | 3004 | Node.js/TypeScript |
-| web-portal | 3000 | React/Vite |
-| public-dvc-web | 3005 | React/Vite |
+### 5. Create the admin account (one-time)
 
-## Infrastructure
-
-| Component | UI | Port |
-|---|---|---|
-| Kafka | Kafka UI | 8090 |
-| PostgreSQL | — | 5432 |
-| MinIO | Console | 9001 |
-| Keycloak | Admin | 8180 |
-| Temporal | Web UI | 8088 |
-
-## Environment Variables
-
-Copy `infra/.env.example` to `.env` and fill in your values before running any service.
-
-## HITL Rules (from INSTRUCTIONS.md)
-
-- AI Confidence Score **< 70** → automatically paused, event emitted to `hitl-pending-topic`
-- The system **never auto-approves** tasks that fail the strict validation engine
-- SLA breach → escalation event emitted to `hitl.escalation` for management intervention
-
-## Deployment (Kubernetes)
+After the dev server is running, seed the default admin account:
 
 ```bash
-kubectl apply -f infra/kubernetes/namespace.yaml
-kubectl apply -f infra/kubernetes/secrets/secrets.yaml  # fill in real values first
-
-helm install ingestion-service infra/kubernetes/ingestion-service -f infra/kubernetes/values.yaml
-helm install document-parser-service infra/kubernetes/document-parser-service -f infra/kubernetes/values.yaml
-helm install ai-agent-service infra/kubernetes/ai-agent-service -f infra/kubernetes/values.yaml
-helm install workflow-engine infra/kubernetes/workflow-engine -f infra/kubernetes/values.yaml
-helm install hitl-manager infra/kubernetes/hitl-manager -f infra/kubernetes/values.yaml
-helm install notification-service infra/kubernetes/notification-service -f infra/kubernetes/values.yaml
-helm install api-gateway infra/kubernetes/api-gateway -f infra/kubernetes/values.yaml
+curl -X POST http://localhost:5173/api/auth/sign-up/email \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@dvc.gov.vn","password":"Admin@DVC2025!","name":"Quản trị viên DVC"}'
 ```
 
-## Troubleshooting
+Expected response: `HTTP 200` with a user object.
 
-### 1. `ECONNREFUSED` on port 3001 (`/api/documents`)
-- **Reason**: The `ingestion-service` is not running. 
-- **Fix**: Run `pnpm dev` in the root, or specifically start the service: `pnpm --filter @dvc/ingestion-service dev`.
+**Default credentials:**
+| | |
+|---|---|
+| Email | `admin@dvc.gov.vn` |
+| Password | `Admin@DVC2025!` |
 
-### 2. Prisma Migration Errors (Diverged data)
-- **Reason**: The local database schema does not match the migration history.
-- **Fix**: Run `pnpm --filter @dvc/database exec prisma migrate reset --force`. Note that this will clear all data.
+> ⚠️ Change this password after first login.
 
-### 3. Port Conflicts
-- **Reason**: Setting a global `PORT` variable in your `.env` can break microservices that use hardcoded default ports.
-- **Fix**: Remove `PORT` from your root `.env`. Each service selects its own port via its local configuration.
+### 6. Access the application
+
+| Route | Description |
+|---|---|
+| `http://localhost:5173/` | Citizen portal — submit documents |
+| `http://localhost:5173/track` | Track document status by code |
+| `http://localhost:5173/portal/login` | Staff login |
+| `http://localhost:5173/portal` | Admin dashboard (requires login) |
+
+---
+
+## Commands Reference
+
+```bash
+# Development
+pnpm dev              # Push local schema + start Vite dev server
+pnpm check            # Svelte type-check + wrangler types sync
+
+# Database
+pnpm db:push          # Push schema to REMOTE Cloudflare D1 (requires env vars)
+pnpm auth:schema      # Regenerate Better Auth table definitions
+
+# Admin
+pnpm seed:admin       # Create admin account (run while dev server is up)
+
+# Production
+pnpm build            # Build for Cloudflare Workers
+pnpm preview          # Preview production build locally
+```
+
+---
+
+## Production Deployment
+
+```bash
+cd app
+
+# 1. Push schema to remote D1 (requires CLOUDFLARE_D1_TOKEN in .env)
+pnpm db:push
+
+# 2. Build and deploy to Cloudflare Pages/Workers
+pnpm build
+npx wrangler deploy
+```
+
+---
+
+## AI + HITL Flow
+
+Documents submitted by citizens are processed automatically:
+
+1. File uploaded → stored in **Cloudflare R2**
+2. **Qwen OCR** extracts text and structured fields
+3. If AI confidence < 70%, SLA is breached, or validation fails → document is **paused** and a task is created in the **HITL Queue**
+4. Staff claim and resolve tasks from `/portal/hitl`
+5. Once validated → routed to leadership approval at `/portal/approval`
+
+---
+
+## Architecture Diagram
+
+```
+Citizen / Staff Browser
+        │
+        ▼
+   SvelteKit (Cloudflare Workers)
+        │
+        ├─ Cloudflare D1 (SQL via Drizzle ORM)
+        ├─ Cloudflare R2 (file storage)
+        ├─ Upstash Redis (caching / rate limiting)
+        └─ DashScope API (Qwen OCR + LLM)
+```

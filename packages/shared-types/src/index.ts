@@ -1,2 +1,2 @@
 export * from './documents.js';
-export * from './kafka-events.js';
+export * from './workflow-events.js';

@@ -1,5 +1,3 @@
-version: '3.9'
-
 networks:
   dvc-net:
     driver: bridge
@@ -8,95 +6,16 @@ volumes:
   postgres-data:
   minio-data:
   keycloak-data:
-  temporal-data:
+  redis-data:
 
 services:
-  # ── Apache Kafka + Zookeeper ──────────────────────────────────────────────
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.7.0
-    container_name: dvc-zookeeper
-    networks: [dvc-net]
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  kafka:
-    image: confluentinc/cp-kafka:7.7.0
-    container_name: dvc-kafka
-    networks: [dvc-net]
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
-      KAFKA_NUM_PARTITIONS: 3
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: dvc-kafka-ui
-    networks: [dvc-net]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8090:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: dvc-local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-
-  kafka-init:
-    image: confluentinc/cp-kafka:7.7.0
-    container_name: dvc-kafka-init
-    networks: [dvc-net]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.received --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.parsed --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.analyzed --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.validated --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.approved --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.rejected --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hitl.manual_entry_required --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hitl.review_required --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hitl.pending-topic --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hitl.escalation --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic hitl.resolved --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic notification.send --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.received.dlq --partitions 1 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic document.parsed.dlq --partitions 1 --replication-factor 1
-      echo 'Topics created.'
-      "
-
   # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: dvc-postgres
     networks: [dvc-net]
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: dvc_user
       POSTGRES_PASSWORD: dvc_password
@@ -115,8 +34,8 @@ services:
     container_name: dvc-minio
     networks: [dvc-net]
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: minio_admin
       MINIO_ROOT_PASSWORD: minio_password
@@ -152,7 +71,7 @@ services:
     container_name: dvc-keycloak
     networks: [dvc-net]
     ports:
-      - "8180:8080"
+      - "${KEYCLOAK_PORT:-8180}:8080"
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/dvc_db
@@ -170,45 +89,54 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
 
-  # ── Temporal.io ───────────────────────────────────────────────────────────
-  temporal:
-    image: temporalio/auto-setup:latest
-    container_name: dvc-temporal
+  # ── Redis (BullMQ backend) ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: dvc-redis
     networks: [dvc-net]
     ports:
-      - "7233:7233"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Unified Core API (Express + BullMQ) ──────────────────────────────────
+  core-api:
+    build:
+      context: ..
+      dockerfile: services/core-api/Dockerfile
+    container_name: dvc-core-api
+    networks: [dvc-net]
+    ports:
+      - "${CORE_API_PORT:-3001}:3001"
     environment:
-      DB: postgres12
-      DB_PORT: 5432
-      POSTGRES_USER: dvc_user
-      POSTGRES_PWD: dvc_password
-      POSTGRES_SEEDS: postgres
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      PORT: ${CORE_API_PORT:-3001}
+      NODE_ENV: development
+      DATABASE_URL: postgresql://dvc_user:dvc_password@postgres:5432/dvc_db
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minio_admin
+      MINIO_SECRET_KEY: minio_password
+      MINIO_BUCKET_DOCUMENTS: dvc-documents
+      MINIO_BUCKET_REDACTED: dvc-redacted
+      MINIO_BUCKET_PUBLISHED: dvc-published
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: dvc
+      LLM_PROVIDER: alibaba
+      LLM_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+      LLM_MODEL: qwen-plus
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      ALIBABA_OCR_API_URL: ${ALIBABA_OCR_API_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./temporal-config:/etc/temporal/config/dynamicconfig
-
-  temporal-ui:
-    image: temporalio/ui:2.31.2
-    container_name: dvc-temporal-ui
-    networks: [dvc-net]
-    ports:
-      - "8088:8080"
-    environment:
-      TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:3000
-    depends_on:
-      - temporal
-
-  temporal-admin-tools:
-    image: temporalio/admin-tools:latest
-    container_name: dvc-temporal-admin
-    networks: [dvc-net]
-    environment:
-      TEMPORAL_ADDRESS: temporal:7233
-    depends_on:
-      - temporal
-    stdin_open: true
-    tty: true
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy

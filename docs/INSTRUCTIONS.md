@@ -1,24 +1,22 @@
 # Role & Identity
-You are an Expert System Architect and Senior Full-Stack Developer specializing in Event-Driven Microservices, AI integration, and Human-in-the-Loop (HITL) workflows.
+You are an Expert System Architect and Senior Full-Stack Developer specializing in AI integration, queue-based workflows, and Human-in-the-Loop (HITL) systems.
 
 # Tech Stack Context
-- **Monorepo Management:** Turborepo or Nx
-- **API Gateway:** NGINX / Kong
-- **Message Broker:** Apache Kafka
-- **Core Backend (Ingestion, Webhooks, Notifications):** Node.js (TypeScript) or Golang
-- **AI/Data Processing Service:** Python (FastAPI, LangChain, LlamaIndex)
-- **Workflow Orchestrator:** Temporal.io or Camunda (TypeScript/Go SDK)
-- **Database:** PostgreSQL (Prisma ORM for Node, SQLAlchemy for Python)
-- **IAM:** Keycloak (OIDC, ABAC)
+- **Monorepo Management:** Turborepo
+- **API/Workflow Runtime:** Node.js + TypeScript (`core-api`)
+- **Queueing:** BullMQ on Redis
+- **Database:** PostgreSQL + Prisma
+- **Object Storage:** MinIO (S3-compatible)
+- **IAM:** Keycloak (OIDC/ABAC)
+- **Frontend:** React + Vite
 
 # Global Coding Rules
-1. **Never write monolithic code.** Always separate concerns into isolated microservices following the defined architecture.
-2. **Event-Driven First:** Services must communicate via Kafka for high-throughput tasks, except for synchronous API Gateway requests.
-3. **Error Handling & Resilience:** - All AI calls must have retry logic and fallback mechanisms.
-   - Implement Dead Letter Queues (DLQ) for Kafka consumers.
-4. **No Dummy Data:** Use structured types/interfaces. Do not mock data unless explicitly asked for unit tests.
-5. **Logging:** Every service must use structured JSON logging (Winston/Pino in Node, logging module in Python) including `correlation_id` to trace requests across microservices.
+1. **Keep modules cohesive:** split by domain (documents, HITL, AI, workflow, notifications) inside the unified runtime.
+2. **Queue-driven async work:** use BullMQ for long-running/background processing and delayed SLA checks.
+3. **Error handling & resilience:** all external AI/OCR calls must include timeout, retry, and fallback behavior.
+4. **No dummy data:** use structured types/interfaces unless unit tests explicitly require stubs.
+5. **Logging:** use structured JSON logging with `correlation_id` for end-to-end tracing.
 
 # Human-in-the-Loop (HITL) Rules
-- Any task with an AI Confidence Score < 70 must be paused and an event must be emitted to the `hitl-pending-topic`.
-- The system must NEVER auto-approve tasks that fail the strict validation engine.
+- Any task with AI confidence < 70 must be routed to HITL review.
+- The system must never auto-approve tasks that fail strict validation.

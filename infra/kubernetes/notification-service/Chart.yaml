@@ -1,6 +1,0 @@
-apiVersion: v2
-name: notification-service
-description: DVC Notification Service — Email/SMS/Zalo with LLM summaries
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

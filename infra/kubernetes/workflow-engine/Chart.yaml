@@ -1,6 +1,0 @@
-apiVersion: v2
-name: workflow-engine
-description: DVC Workflow Engine — Temporal.io worker with SLA state machine
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

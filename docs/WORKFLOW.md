@@ -12,7 +12,7 @@ flowchart TD
         DVC[Cổng Dịch vụ công - Online]
         Offline[Phòng ban tiếp nhận - Offline]
         API[API Gateway - NGINX]
-        Kafka[Message Broker - Apache Kafka]
+        Queue[BullMQ Queue - Redis]
     end
 
     User -->|Nộp hồ sơ| DVC
@@ -20,7 +20,7 @@ flowchart TD
     DVC --> API
     Offline --> API
     API -.->|Thông báo: Đang xử lí hồ sơ| User:::notify
-    API --> Kafka
+    API --> Queue
 
     %% ---------------- BƯỚC 2 ----------------
     subgraph B2 [Bước 2: Xử lý định dạng và Phân quyền]
@@ -42,7 +42,7 @@ flowchart TD
         Keycloak[Phân quyền - Keycloak ABAC => Khóa file: Unclassified -> Secret]
     end
 
-    Kafka --> Split
+    Queue --> Split
     Split -->|PDF Text| NativePDF
     Split -->|Hình ảnh / PDF Scan| Scan
     
