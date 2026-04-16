@@ -22,6 +22,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://dvc_user:dvc_password@localhost:5432/dvc_db"
 
+    # OCR Settings
+    tesseract_cmd: str = ""  # Path to tesseract.exe (e.g. C:\Program Files\Tesseract-OCR\tesseract.exe)
+
     @property
     def kafka_broker_list(self) -> List[str]:
         return self.kafka_brokers.split(",")

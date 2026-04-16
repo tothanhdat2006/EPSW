@@ -18,17 +18,32 @@ class ExtractionResult(BaseModel):
     reference_number: Optional[str] = Field(default=None, description="Official reference/document number")
     keywords: list = Field(default_factory=list, description="Key terms from the document")
     custom_fields: dict = Field(default_factory=dict, description="Any other structured fields found")
-    extraction_confidence: float = Field(description="Confidence from 0.0 to 100.0 for this extraction")
+    extraction_confidence: int = Field(description="Confidence from 0 to 100 for this extraction")
 
 
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are an expert at extracting structured data from Vietnamese government documents.
-Extract all relevant fields from the document text.
-For dates, use ISO format (YYYY-MM-DD).
-For names and addresses, preserve the original Vietnamese text.
-Return a JSON object matching the schema exactly.
-Set extraction_confidence to your certainty from 0-100."""),
-    ("human", "Document type: {document_type}\n\nDocument text:\n\n{text}\n\nReturn extracted data as JSON:"),
+    ("system", """BẠN LÀ CHUYÊN VIÊN TRÍCH XUẤT DỮ LIỆU TỪ HỒ SƠ HÀNH CHÍNH VIỆT NAM.
+Phân tích văn bản và trả về JSON theo đúng cấu trúc sau:
+
+{{
+  "issuing_authority": "Cơ quan ban hành hoặc Nơi nhận hồ sơ",
+  "issue_date": "YYYY-MM-DD",
+  "expiry_date": "YYYY-MM-DD",
+  "subject_name": "Họ và tên của người làm đơn/đối tượng chính",
+  "subject_id": "Số định danh/CCCD/CMND",
+  "address": "Địa chỉ thường trú/liên lạc",
+  "purpose": "Nội dung đề nghị hoặc mục đích hồ sơ",
+  "reference_number": "Số hiệu văn bản (nếu có)",
+  "keywords": ["từ_khóa_1", "từ_khóa_2"],
+  "custom_fields": {{}},
+  "extraction_confidence": integer (0-100)
+}}
+
+BẮT BUỘC:
+- Nếu không tìm thấy thông tin, hãy để null.
+- Giữ nguyên tiếng Việt có dấu.
+- Chỉ trả về JSON."""),
+    ("human", "Loại hồ sơ: {document_type}\n\nNội dung văn bản:\n\n{text}\n\nTrả về kết quả JSON:"),
 ])
 
 

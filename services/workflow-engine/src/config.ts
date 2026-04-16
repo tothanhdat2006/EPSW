@@ -16,4 +16,11 @@ export const config = {
     urgentMs: 2 * 60 * 60 * 1000,
     flashMs: 30 * 60 * 1000,
   },
+  minio: {
+    endPoint: process.env['MINIO_ENDPOINT'] ?? 'localhost',
+    port: parseInt(process.env['MINIO_PORT'] ?? '9000', 10),
+    useSSL: process.env['MINIO_USE_SSL'] === 'true',
+    accessKey: process.env['MINIO_ACCESS_KEY'] ?? 'minio_admin',
+    secretKey: process.env['MINIO_SECRET_KEY'] ?? 'minio_password',
+  },
 } as const;

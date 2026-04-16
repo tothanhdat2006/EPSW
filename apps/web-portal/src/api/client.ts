@@ -291,6 +291,8 @@ export interface DocumentSummary {
   securityLevel: string;
   aiConfidence?: number;
   slaDeadline?: string;
+  rawFileUrl?: string;
+  redactedFileUrl?: string;
   createdAt: string;
   updatedAt: string;
   extractedData?: Record<string, unknown>;
@@ -337,7 +339,8 @@ export const documentsApi = {
     requestWithFallback(
       () =>
         apiClient
-          .get<DocumentSummary>(`/documents/${identifier}`)
+          .get<DocumentSummary>(`/documents/id/${identifier}`)
+          .catch(() => apiClient.get<DocumentSummary>(`/documents/${identifier}`))
           .then((res) => ({ data: res.data })),
       async () => {
         const documents = await getMockDocuments();
@@ -407,4 +410,11 @@ export const hitlApi = {
       : apiClient
           .post(`/hitl/tasks/${taskId}/resolve`, { resolutionData })
           .then((res) => ({ data: res.data })),
+};
+
+export const aiApi = {
+  chat: (documentId: string, message: string, history: { role: string; content: string }[]) =>
+    apiClient.post<{ response?: string; error?: string }>('/ai/chat', { documentId, message, history }),
+  reAnalyze: (documentId: string, trackingCode: string, rawText: string) =>
+    apiClient.post('/ai/re-analyze', { documentId, trackingCode, rawText }),
 };

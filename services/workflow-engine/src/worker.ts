@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { Worker, NativeConnection } from '@temporalio/worker';
 import { createLogger } from '@dvc/logger';
 import { config } from './config.js';
@@ -5,6 +7,8 @@ import { startKafkaTrigger } from './kafka-trigger.js';
 import * as slaActivities from './activities/sla.js';
 import * as validationActivities from './activities/validation.js';
 import * as notificationActivities from './activities/notification.js';
+import * as aiActivities from './activities/ai.js';
+import * as pdfActivities from './activities/pdf.js';
 
 const logger = createLogger({ service: 'workflow-engine' });
 
@@ -19,11 +23,13 @@ async function main(): Promise<void> {
     connection,
     namespace: config.temporal.namespace,
     taskQueue: config.temporal.taskQueue,
-    workflowsPath: new URL('./workflows/document-workflow.js', import.meta.url).pathname,
+    workflowsPath: require.resolve('./workflows/document-workflow'),
     activities: {
       ...slaActivities,
       ...validationActivities,
       ...notificationActivities,
+      ...aiActivities,
+      ...pdfActivities,
     },
   });
 

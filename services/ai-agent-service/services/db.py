@@ -53,3 +53,25 @@ def update_document_after_analysis(
         raise
     finally:
         session.close()
+
+
+def get_document_data(document_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch the complete document record from PostgreSQL.
+    """
+    session: Session = SessionLocal()
+    try:
+        result = session.execute(
+            text('SELECT * FROM "Document" WHERE id = :id'),
+            {"id": document_id}
+        ).mappings().first()
+        
+        if result:
+            # result is a RowMapping, convert to dict
+            return dict(result)
+        return None
+    except Exception as exc:
+        logger.error({"documentId": document_id, "error": str(exc), "message": "Failed to fetch document data"})
+        return None
+    finally:
+        session.close()

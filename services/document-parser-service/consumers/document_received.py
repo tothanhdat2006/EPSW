@@ -39,9 +39,9 @@ def _download_file(minio: Minio, bucket: str, object_key: str) -> bytes:
 
 async def _process_message(msg_value: dict) -> None:
     payload = msg_value.get("payload", {})
-    document_id: str = payload["documentId"]
-    tracking_code: str = payload["trackingCode"]
-    raw_file_url: str = payload["rawFileUrl"]
+    document_id: str = payload.get("documentId", "unknown")
+    tracking_code: str = payload.get("trackingCode", "unknown")
+    raw_file_url: str = payload.get("rawFileUrl", "")
     mime_type: str = payload.get("mimeType", "application/pdf")
     correlation_id: str = msg_value.get("correlationId", document_id)
 
@@ -66,9 +66,20 @@ async def _process_message(msg_value: dict) -> None:
         parse_method = "OCR"
     elif mime_type == "application/pdf":
         if is_native_pdf(file_bytes):
+            logger.info({"documentId": document_id, "message": "Attempting native PDF extraction"})
             raw_text, page_count = extract_text_from_pdf(file_bytes)
-            parse_method = "PDF_READER"
+            
+            # FALLBACK: If native extraction is too short, it might be a scanned PDF
+            # that was incorrectly identified as native (e.g. junk text or just metadata)
+            if len(raw_text.strip()) < 100:
+                logger.info({"documentId": document_id, "textLength": len(raw_text), "message": "Native extraction yield too low. Falling back to OCR..."})
+                ocr_text, _ = ocr_pdf(file_bytes)
+                raw_text = ocr_text
+                parse_method = "OCR_FALLBACK"
+            else:
+                parse_method = "PDF_READER"
         else:
+            logger.info({"documentId": document_id, "message": "Attempting OCR PDF extraction"})
             raw_text, page_count = ocr_pdf(file_bytes)
             parse_method = "OCR"
 
@@ -103,6 +114,7 @@ async def start_consumer() -> None:
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         auto_offset_reset="earliest",
         enable_auto_commit=False,
+        request_timeout_ms=5000,
     )
     await consumer.start()
     _logger.info({"topic": settings.kafka_topic_document_received, "message": "Consumer started"})
@@ -110,11 +122,13 @@ async def start_consumer() -> None:
     try:
         async for msg in consumer:
             try:
+                _logger.info({"topic": msg.topic, "partition": msg.partition, "offset": msg.offset, "message": "Message received from Kafka"})
                 await _process_message(msg.value)
                 await consumer.commit()
+                _logger.info({"message": "Message processed and committed"})
             except Exception as exc:
                 correlation_id = (msg.value or {}).get("correlationId", "unknown")
-                _logger.error({"error": str(exc), "correlationId": correlation_id, "message": "Failed to process message"})
+                _logger.error({"error": str(exc), "correlation_id": correlation_id, "message": "Failed to process message"})
                 await publish_to_dlq(
                     topic=settings.kafka_topic_document_received,
                     raw_message=msg.value if isinstance(msg.value, bytes) else json.dumps(msg.value).encode(),

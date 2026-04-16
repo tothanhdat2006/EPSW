@@ -12,29 +12,32 @@ class ClassificationResult(BaseModel):
     urgency: str = Field(description="One of: NORMAL, URGENT, FLASH")
     security_level: str = Field(description="One of: UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET")
     department: str = Field(description="Responsible department code, e.g. 'SO_KH_DT', 'UBND_TINH'")
-    summary: str = Field(description="One-sentence summary of document purpose")
-    confidence: float = Field(description="Confidence score from 0.0 to 100.0")
+    summary: str = Field(description="Concise 1-2 sentence summary of document purpose and subject in Vietnamese")
+    confidence: int = Field(description="Confidence score from 0 to 100")
     contains_pii: bool = Field(description="Whether the document contains Personally Identifiable Information")
     pii_fields: Optional[list] = Field(default=None, description="List of PII field names found")
 
 
 CLASSIFICATION_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are an expert Vietnamese government document analyst.
-Classify the given document text and return a JSON object matching the schema exactly.
+    ("system", """BẠN LÀ CHUYÊN VIÊN PHÂN TÍCH HỒ SƠ HÀNH CHÍNH CHUYÊN NGHIỆP.
+Phân tích văn bản tiếng Việt và trả về JSON theo đúng cấu trúc sau:
 
-Security levels:
-- UNCLASSIFIED: Public information
-- RESTRICTED: Internal government use
-- CONFIDENTIAL: Sensitive, limited distribution
-- SECRET: Classified, strict need-to-know
+{{
+  "document_type": "Loại hồ sơ (VD: TỜ KHAI CT01)",
+  "urgency": "NORMAL | URGENT | FLASH",
+  "security_level": "UNCLASSIFIED | RESTRICTED | CONFIDENTIAL | SECRET",
+  "department": "Phòng/Ban xử lý (VD: CONG_AN_XA)",
+  "summary": "Tóm tắt ngắn gọn mục đích và đối tượng (1-2 câu tiếng Việt)",
+  "confidence": integer (0-100),
+  "contains_pii": boolean,
+  "pii_fields": ["danh_sach_truong_can_che_mo"]
+}}
 
-Urgency levels:
-- NORMAL: Standard processing (48h SLA)
-- URGENT: Expedited processing (2h SLA)
-- FLASH: Immediate processing (Hỏa tốc)
-
-Always return confidence as your certainty from 0-100."""),
-    ("human", "Document text:\n\n{text}\n\nReturn classification as JSON:"),
+BẮT BUỘC:
+- Chỉ trả về JSON, không giải thích gì thêm.
+- Tóm tắt (summary) phải súc tích, chuyên nghiệp.
+"""),
+    ("human", "Nội dung văn bản:\n\n{text}\n\nTrả về kết quả JSON:"),
 ])
 
 

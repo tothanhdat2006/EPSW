@@ -33,20 +33,23 @@ class Settings(BaseSettings):
     llm_base_url: Optional[str] = None
     # Backward-compat (deprecated): prefer LLM_API_KEY
     openai_api_key: Optional[str] = None
+    # Backward-compat (deprecated): DashScope legacy key
+    dashscope_api_key: Optional[str] = None
     llm_temperature: float = 0.0
 
     # HITL confidence threshold per INSTRUCTIONS.md
     confidence_threshold: float = 70.0
 
     class Config:
-        env_file = ".env"
+        env_file = ["../../.env", ".env"]
+        extra = "ignore"
 
 
 settings = Settings()
 
 
 def resolve_llm_api_key() -> Optional[str]:
-    return settings.llm_api_key or settings.openai_api_key
+    return settings.llm_api_key or settings.openai_api_key or settings.dashscope_api_key
 
 
 def resolve_llm_base_url() -> Optional[str]:
