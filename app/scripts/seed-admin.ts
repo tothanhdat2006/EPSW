@@ -44,6 +44,7 @@ async function createAdminViaApi() {
 	console.log(`   📧 Email    : ${ADMIN_EMAIL}`);
 	console.log(`   🔑 Password : ${ADMIN_PASSWORD}`);
 	console.log(`   👤 Name     : ${ADMIN_NAME}`);
+	console.log(`   🛡️ Role     : admin (Manual patch applied)`);
 	console.log('\n⚠️  IMPORTANT: Change this password immediately after first login!\n');
 }
 

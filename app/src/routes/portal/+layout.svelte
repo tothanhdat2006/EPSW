@@ -11,7 +11,8 @@
 		{ href: '/portal', icon: LayoutDashboard, label: 'Dashboard', exact: true },
 		{ href: '/portal/hitl', icon: ClipboardList, label: 'Hàng đợi HITL', exact: false },
 		{ href: '/portal/review', icon: FileSearch, label: 'Kiểm duyệt hồ sơ', exact: false },
-		{ href: '/portal/approval', icon: CheckCircle, label: 'Phê duyệt Lãnh đạo', exact: false }
+		{ href: '/portal/approval', icon: CheckCircle, label: 'Phê duyệt Lãnh đạo', exact: false },
+		{ href: '/portal/users', icon: UserRound, label: 'Quản lý nhân sự', exact: false }
 	];
 
 	function isActive(item: (typeof NAV)[0]) {

@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
+
 import { sveltekitCookies } from "better-auth/svelte-kit";
 import { env } from "$env/dynamic/private";
 import { getRequestEvent } from "$app/server";
@@ -9,7 +11,16 @@ const authConfig = ({
 	baseURL: env.ORIGIN,
 	secret: env.BETTER_AUTH_SECRET,
 	emailAndPassword: { enabled: true },
+	user: {
+		additionalFields: {
+			role: {
+				type: 'string',
+				defaultValue: 'staff'
+			}
+		}
+	},
 	plugins: [
+		admin(),
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
 	]
 }) satisfies Omit<Parameters<typeof betterAuth>[0], "database">;
