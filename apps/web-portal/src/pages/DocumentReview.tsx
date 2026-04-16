@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Shield, Brain, Calendar, User, Building, ExternalLink, FileText, ImageIcon, Save, Sparkles, MessageSquare, AlertTriangle, Send, Loader2, RotateCw, X } from 'lucide-react';
+import { Shield, Brain, Calendar, User, Building, ExternalLink, FileText, ImageIcon, Save, Sparkles, MessageSquare, Send, Loader2, RotateCw, X } from 'lucide-react';
 import { documentsApi, aiApi } from '../api/client.ts';
 import StatusBadge from '../components/StatusBadge.tsx';
 import PriorityBadge from '../components/PriorityBadge.tsx';
@@ -95,7 +95,7 @@ export default function DocumentReview() {
       if (data.data.error) {
         setChatHistory(prev => [...prev, { role: 'assistant', content: `Lỗi: ${data.data.error}` }]);
       } else {
-        setChatHistory(prev => [...prev, { role: 'assistant', content: data.data.response }]);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: data.data.response ?? 'Không có phản hồi từ AI.' }]);
       }
     },
     onError: (error: any) => {

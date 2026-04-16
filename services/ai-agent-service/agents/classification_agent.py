@@ -1,11 +1,9 @@
-from langchain_community.chat_models.tongyi import ChatTongyi
-import dashscope
-dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from typing import Optional
-from config import settings
+from config import settings, resolve_llm_api_key, resolve_llm_base_url
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 
@@ -43,11 +41,14 @@ BẮT BUỘC:
 ])
 
 
-def _get_llm() -> ChatTongyi:
-    return ChatTongyi(
+def _get_llm() -> ChatOpenAI:
+    api_key = resolve_llm_api_key()
+    base_url = resolve_llm_base_url()
+    return ChatOpenAI(
         model=settings.llm_model,
         temperature=settings.llm_temperature,
-        dashscope_api_key=settings.dashscope_api_key,
+        api_key=api_key,
+        base_url=base_url,
     )
 
 

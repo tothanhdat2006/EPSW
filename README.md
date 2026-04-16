@@ -70,6 +70,38 @@ Run these in separate terminals:
 - **Document Parser**: `cd services/document-parser-service && uvicorn main:app --port 8001 --reload`
 - **AI Agent**: `cd services/ai-agent-service && uvicorn main:app --port 8002 --reload`
 
+## Integrate External JSON Data into Web Portal (qwen-rag)
+
+To load external datasets from:
+
+- `/home/phuc/Project/qwen-rag/data.json`
+- `/home/phuc/Project/qwen-rag/data_detail.json`
+
+run the sync pipeline from the monorepo root:
+
+```bash
+pnpm sync:qwen-data
+```
+
+This copies and validates JSON into:
+
+- `apps/web-portal/public/mock/qwen-data.json`
+- `apps/web-portal/public/mock/qwen-data-detail.json`
+
+Then start web portal in local JSON mode:
+
+```bash
+pnpm --filter @dvc/web-portal dev:mock
+```
+
+Or run sync + dev in one command:
+
+```bash
+pnpm dev:web-portal:mock
+```
+
+In mock mode, web-portal reads local files first and falls back to API only when needed.
+
 ## Services
 
 | Service | Port | Tech |

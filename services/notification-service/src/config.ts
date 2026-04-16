@@ -27,7 +27,13 @@ export const config = {
   },
 
   llm: {
-    model: process.env['LLM_MODEL'] ?? 'gpt-4o-mini',
-    apiKey: process.env['OPENAI_API_KEY'] ?? '',
+    provider: process.env['LLM_PROVIDER'] ?? 'alibaba',
+    model: process.env['LLM_MODEL'] ?? 'qwen-plus',
+    apiKey: process.env['LLM_API_KEY'] ?? process.env['OPENAI_API_KEY'] ?? '',
+    baseUrl:
+      process.env['LLM_BASE_URL'] ??
+      ((process.env['LLM_PROVIDER'] ?? '').toLowerCase() === 'openai'
+        ? undefined
+        : 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
   },
 } as const;
