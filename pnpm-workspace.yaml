@@ -1,8 +1,0 @@
-packages:
-  - "app"
-  - "apps/*"
-  - "services/core-api"
-  - "packages/*"
-onlyBuiltDependencies:
-  - '@tailwindcss/oxide'
-  - esbuild

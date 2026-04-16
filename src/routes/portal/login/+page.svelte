@@ -2,7 +2,6 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle, BrainCircuit } from 'lucide-svelte';
-	import { Button } from '$lib/components/ui/button';
 	import { authClient } from '$lib/auth-client';
 
 	// ─── State ────────────────────────────────────────────────────────────────
@@ -14,11 +13,13 @@
 	let errorMsg = $state('');
 
 	const redirectTo = $derived(page.url.searchParams.get('redirectTo') ?? '/portal');
+	const canSubmit = $derived(!isLoading && email.length > 0 && password.length > 0);
 
 	// ─── Submit ───────────────────────────────────────────────────────────────
 
 	async function handleLogin(e: SubmitEvent) {
 		e.preventDefault();
+		if (!canSubmit) return;
 		isLoading = true;
 		errorMsg = '';
 
@@ -138,20 +139,22 @@
 				{/if}
 
 				<!-- Submit -->
-				<Button
+				<button
 					type="submit"
-					size="lg"
-					disabled={isLoading || !email || !password}
-					class="w-full h-13 text-[15px] font-extrabold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20 rounded-xl transition-all active:scale-[0.98]"
+					disabled={!canSubmit}
+					class="w-full h-13 flex items-center justify-center gap-2 text-[15px] font-extrabold rounded-xl transition-all active:scale-[0.98]
+						{canSubmit
+							? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl shadow-primary/20 cursor-pointer'
+							: 'bg-primary/40 text-primary-foreground/50 cursor-not-allowed'}"
 				>
 					{#if isLoading}
-						<span class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></span>
+						<span class="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></span>
 						Đang xác thực...
 					{:else}
-						<ShieldCheck size={18} class="mr-2" />
+						<ShieldCheck size={18} />
 						Truy cập hệ thống
 					{/if}
-				</Button>
+				</button>
 			</form>
 
 			<!-- Demo credentials hint -->

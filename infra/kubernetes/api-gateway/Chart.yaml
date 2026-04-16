@@ -1,6 +1,0 @@
-apiVersion: v2
-name: api-gateway
-description: DVC API Gateway — NGINX reverse proxy with rate limiting
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

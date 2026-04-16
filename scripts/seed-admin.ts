@@ -21,7 +21,10 @@ async function createAdminViaApi() {
 	
 	const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: {
+			'Content-Type': 'application/json',
+			'Origin': baseUrl
+		},
 		body: JSON.stringify({
 			email: ADMIN_EMAIL,
 			password: ADMIN_PASSWORD,
