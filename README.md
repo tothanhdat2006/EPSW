@@ -1,6 +1,6 @@
 # DVC Workflow System
 
-A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dịch vụ Công). Built as an Event-Driven Microservices monorepo.
+A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dich vu Cong). The runtime architecture has been simplified to a unified Node Core API with BullMQ.
 
 ## Architecture
 
@@ -8,35 +8,18 @@ A high-throughput, AI-augmented document processing platform for Vietnamese publ
 Citizen / Staff
       │
       ▼
-API Gateway (NGINX)
+apps/web-portal / apps/public-dvc-web
       │
-      ├─► ingestion-service (Node.js/TS)   → Kafka: document.received
-      │         └─ MinIO (raw file storage)
-      │
-Kafka ├─► document-parser-service (Python) → PyMuPDF + Tesseract OCR
-      │         └─ Kafka: document.parsed | hitl.manual_entry_required
-      │
-      ├─► ai-agent-service (Python/LangChain)
-      │         ├─ Classification (doc type, urgency, security level)
-      │         ├─ Extraction (structured JSON)
-      │         ├─ Redaction (PII removal → MinIO)
-      │         └─ Confidence Gate: <70% → hitl.pending-topic
-      │
-      ├─► workflow-engine (Temporal.io/TS)
-      │         ├─ Document state machine (RECEIVED→PUBLISHED)
-      │         ├─ Dynamic SLA timers (FLASH:30m, URGENT:2h, NORMAL:48h)
-      │         └─ Escalation on SLA breach → hitl.escalation
-      │
-      ├─► hitl-manager (Node.js/TS)
-      │         ├─ Creates HitlTask records
-      │         ├─ Keycloak ABAC role enforcement
-      │         └─ REST API for claim/resolve tasks
-      │
-      └─► notification-service (Node.js/TS)
-                ├─ Email (Nodemailer)
-                ├─ SMS gateway
-                ├─ Zalo OA API
-                └─ LLM summary / rejection translation
+      ▼
+core-api (Node.js/TypeScript, Express)
+      ├─ Documents API (submit, track, review, approve)
+      ├─ HITL API (claim/resolve task)
+      ├─ AI API (chat, re-analyze)
+      ├─ Alibaba OCR + LLM adapters
+      ├─ BullMQ workflows (document processing + SLA checks)
+      ├─ Notification dispatch (email/SMS/Zalo)
+      ├─ PostgreSQL (Prisma)
+      └─ MinIO (raw/redacted/published files)
 ```
 
 ## Quick Start (Local)
@@ -45,6 +28,12 @@ Kafka ├─► document-parser-service (Python) → PyMuPDF + Tesseract OCR
 ```bash
 cd infra
 docker compose up -d
+```
+
+If host ports conflict on your machine, override them inline, for example:
+
+```bash
+POSTGRES_PORT=5434 docker compose up -d
 ```
 
 ### 2. Initialize Keycloak Schema (Required once)
@@ -62,13 +51,11 @@ pnpm --filter @dvc/database db:migrate:dev
 ```
 
 ### 4. Configure Environment
-Ensure you have a `.env` file in the root. **IMPORTANT**: Do not set a global `PORT` variable in the root `.env` as it will cause port conflicts between microservices. Each service will use its default port (3001, 3003, 3004) automatically.
+Ensure you have a `.env` file in the root. Required keys now include `DATABASE_URL`, `REDIS_URL`, `LLM_API_KEY`, and MinIO credentials.
 
 ### 5. Running the System
-Run these in separate terminals:
-- **TypeScript Stack**: `pnpm dev`
-- **Document Parser**: `cd services/document-parser-service && uvicorn main:app --port 8001 --reload`
-- **AI Agent**: `cd services/ai-agent-service && uvicorn main:app --port 8002 --reload`
+Run this in one terminal:
+- **Unified Stack**: `pnpm dev`
 
 ## Integrate External JSON Data into Web Portal (qwen-rag)
 
@@ -106,13 +93,7 @@ In mock mode, web-portal reads local files first and falls back to API only when
 
 | Service | Port | Tech |
 |---|---|---|
-| api-gateway | 80 | NGINX |
-| ingestion-service | 3001 | Node.js/TypeScript |
-| document-parser-service | 8001 | Python/FastAPI |
-| ai-agent-service | 8002 | Python/FastAPI/LangChain |
-| workflow-engine | — (worker) | TypeScript/Temporal.io |
-| hitl-manager | 3003 | Node.js/TypeScript |
-| notification-service | 3004 | Node.js/TypeScript |
+| core-api | 3001 | Node.js/TypeScript (Express + BullMQ) |
 | web-portal | 3000 | React/Vite |
 | public-dvc-web | 3005 | React/Vite |
 
@@ -120,47 +101,40 @@ In mock mode, web-portal reads local files first and falls back to API only when
 
 | Component | UI | Port |
 |---|---|---|
-| Kafka | Kafka UI | 8090 |
-| PostgreSQL | — | 5432 |
+| Redis | — | 6379 |
+| PostgreSQL | — | 5433 |
 | MinIO | Console | 9001 |
 | Keycloak | Admin | 8180 |
-| Temporal | Web UI | 8088 |
 
 ## Environment Variables
 
 Copy `infra/.env.example` to `.env` and fill in your values before running any service.
 
-## HITL Rules (from INSTRUCTIONS.md)
+## HITL Rules
 
-- AI Confidence Score **< 70** → automatically paused, event emitted to `hitl-pending-topic`
-- The system **never auto-approves** tasks that fail the strict validation engine
-- SLA breach → escalation event emitted to `hitl.escalation` for management intervention
+- AI Confidence Score **< 70** -> automatically paused and a HITL task is created.
+- The system never auto-approves tasks that fail strict validation.
+- SLA breach creates a manager escalation HITL task.
 
 ## Deployment (Kubernetes)
 
 ```bash
 kubectl apply -f infra/kubernetes/namespace.yaml
 kubectl apply -f infra/kubernetes/secrets/secrets.yaml  # fill in real values first
-
-helm install ingestion-service infra/kubernetes/ingestion-service -f infra/kubernetes/values.yaml
-helm install document-parser-service infra/kubernetes/document-parser-service -f infra/kubernetes/values.yaml
-helm install ai-agent-service infra/kubernetes/ai-agent-service -f infra/kubernetes/values.yaml
-helm install workflow-engine infra/kubernetes/workflow-engine -f infra/kubernetes/values.yaml
-helm install hitl-manager infra/kubernetes/hitl-manager -f infra/kubernetes/values.yaml
-helm install notification-service infra/kubernetes/notification-service -f infra/kubernetes/values.yaml
-helm install api-gateway infra/kubernetes/api-gateway -f infra/kubernetes/values.yaml
 ```
+
+Legacy per-service Helm charts were removed as part of the unified runtime refactor. For Kubernetes deployment, create a dedicated `core-api` chart (or extend `infra/kubernetes/api-gateway` if you still use it as ingress).
 
 ## Troubleshooting
 
 ### 1. `ECONNREFUSED` on port 3001 (`/api/documents`)
-- **Reason**: The `ingestion-service` is not running. 
-- **Fix**: Run `pnpm dev` in the root, or specifically start the service: `pnpm --filter @dvc/ingestion-service dev`.
+- **Reason**: The `core-api` service is not running.
+- **Fix**: Run `pnpm dev` in the root, or specifically start the service: `pnpm --filter @dvc/core-api dev`.
 
 ### 2. Prisma Migration Errors (Diverged data)
 - **Reason**: The local database schema does not match the migration history.
 - **Fix**: Run `pnpm --filter @dvc/database exec prisma migrate reset --force`. Note that this will clear all data.
 
 ### 3. Port Conflicts
-- **Reason**: Setting a global `PORT` variable in your `.env` can break microservices that use hardcoded default ports.
-- **Fix**: Remove `PORT` from your root `.env`. Each service selects its own port via its local configuration.
+- **Reason**: Another process is using mapped host ports (for example `5433`, `3001`, `3000`, `3005`).
+- **Fix**: Stop the conflicting process or override compose ports (for example `POSTGRES_PORT=5434 docker compose up -d`).

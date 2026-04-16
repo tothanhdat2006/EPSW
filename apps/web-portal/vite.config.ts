@@ -11,11 +11,11 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/hitl': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
       '/api/ai': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
       '/dvc-documents': {

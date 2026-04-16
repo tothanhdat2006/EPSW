@@ -1,7 +1,4 @@
 packages:
   - "apps/*"
-  - "services/ingestion-service"
-  - "services/workflow-engine"
-  - "services/hitl-manager"
-  - "services/notification-service"
+  - "services/core-api"
   - "packages/*"

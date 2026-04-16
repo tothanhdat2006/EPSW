@@ -4,8 +4,8 @@ global:
   imagePullPolicy: IfNotPresent
   namespace: dvc-system
 
-  kafka:
-    brokers: "kafka:29092"
+  redis:
+    url: "redis://redis:6379"
 
   postgres:
     host: postgres
@@ -25,11 +25,6 @@ global:
   keycloak:
     url: "http://keycloak:8080"
     realm: dvc
-
-  temporal:
-    address: "temporal:7233"
-    namespace: default
-    taskQueue: dvc-workflow
 
   llm:
     model: "gpt-4o-mini"

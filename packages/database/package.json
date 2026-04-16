@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && prisma generate",
+    "build": "prisma generate && tsc && mkdir -p dist/generated && cp -R src/generated/prisma dist/generated/",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",

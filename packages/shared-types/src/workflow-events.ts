@@ -154,7 +154,7 @@ export interface NotificationSendEvent extends BaseEvent {
   };
 }
 
-export type KafkaEvent =
+export type WorkflowEvent =
   | DocumentReceivedEvent
   | DocumentParsedEvent
   | DocumentAnalyzedEvent
@@ -168,7 +168,7 @@ export type KafkaEvent =
   | HitlResolvedEvent
   | NotificationSendEvent;
 
-export const KAFKA_TOPICS = {
+export const WORKFLOW_EVENT_TYPES = {
   DOCUMENT_RECEIVED: 'document.received',
   DOCUMENT_PARSED: 'document.parsed',
   DOCUMENT_ANALYZED: 'document.analyzed',
@@ -181,5 +181,4 @@ export const KAFKA_TOPICS = {
   HITL_ESCALATION: 'hitl.escalation',
   HITL_RESOLVED: 'hitl.resolved',
   NOTIFICATION_SEND: 'notification.send',
-  DLQ_SUFFIX: '.dlq',
 } as const;
