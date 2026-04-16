@@ -75,3 +75,37 @@ export async function emitEscalationEvent(
   await producer.disconnect();
   reqLogger.warn({ overdueByMinutes }, 'SLA escalation event emitted');
 }
+
+export async function emitLeaderApprovalEvent(
+  documentId: string,
+  trackingCode: string,
+  correlationId: string,
+): Promise<void> {
+  const reqLogger = withCorrelation(logger, correlationId, { documentId });
+  const producer = kafka.producer({ createPartitioner: Partitioners.DefaultPartitioner });
+  await producer.connect();
+
+  const event = {
+    eventId: uuidv4(),
+    correlationId,
+    timestamp: new Date().toISOString(),
+    version: '1.0',
+    type: 'hitl.pending',
+    payload: {
+      documentId,
+      trackingCode,
+      taskType: 'LEADER_APPROVAL',
+      assignedRole: 'LANH_DAO',
+      reason: 'Cần lãnh đạo phê duyệt (Final Approval)',
+    },
+  };
+
+  await producer.send({
+    topic: KAFKA_TOPICS.HITL_PENDING,
+    messages: [{ key: documentId, value: JSON.stringify(event) }],
+  });
+
+  await producer.disconnect();
+  reqLogger.info('Leader approval HITL task event emitted');
+}
+

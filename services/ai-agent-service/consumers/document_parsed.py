@@ -9,6 +9,7 @@ from logger import get_logger
 from agents.classification_agent import classify_document
 from agents.extraction_agent import extract_document_data
 from agents.redaction_agent import redact_and_upload
+from agents.redaction_identification_agent import identify_pii_for_redaction
 from services.confidence import compute_overall_confidence
 from services.db import update_document_after_analysis
 from typing import Optional
@@ -17,7 +18,7 @@ _logger = get_logger(settings.service_name)
 _producer: Optional[AIOKafkaProducer] = None
 
 
-async def _get_producer() -> AIOKafkaProducer:
+async def get_producer() -> AIOKafkaProducer:
     global _producer
     if _producer is None:
         _producer = AIOKafkaProducer(
@@ -26,6 +27,7 @@ async def _get_producer() -> AIOKafkaProducer:
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             enable_idempotence=True,
             acks="all",
+            request_timeout_ms=5000,
         )
         await _producer.start()
     return _producer
@@ -51,7 +53,7 @@ def _get_minio() -> Minio:
     )
 
 
-async def _process_message(msg_value: dict) -> None:
+async def process_analysis(msg_value: dict) -> None:
     payload = msg_value.get("payload", {})
     document_id: str = payload["documentId"]
     tracking_code: str = payload["trackingCode"]
@@ -84,20 +86,26 @@ async def _process_message(msg_value: dict) -> None:
 
         # Step 4: Redact PII if present
         redacted_url: Optional[str] = None
-        if classification.contains_pii and classification.pii_fields:
-            # Fetch original file bytes for redaction
-            try:
-                minio = _get_minio()
-                # Derive object key from tracking code (simplified)
-                obj_key = f"{document_id}/"
-                objects = list(minio.list_objects(settings.minio_bucket_documents, prefix=obj_key))
-                if objects:
-                    response = minio.get_object(settings.minio_bucket_documents, objects[0].object_name)
-                    file_bytes = response.read()
-                    response.close()
-                    redacted_url = await redact_and_upload(document_id, file_bytes, classification.pii_fields, correlation_id)
-            except Exception as exc:
-                logger.warning({"documentId": document_id, "error": str(exc), "message": "Redaction skipped"})
+        if classification.contains_pii:
+            # Semantic Redaction: Use Qwen to find EXACT strings to redact
+            pii_strings = await identify_pii_for_redaction(raw_text)
+            
+            if pii_strings:
+                # Fetch original file bytes for redaction
+                try:
+                    minio = _get_minio()
+                    # Derive object key from tracking code (simplified)
+                    obj_key = f"{document_id}/"
+                    objects = list(minio.list_objects(settings.minio_bucket_documents, prefix=obj_key))
+                    if objects:
+                        response = minio.get_object(settings.minio_bucket_documents, objects[0].object_name)
+                        file_bytes = response.read()
+                        response.close()
+                        redacted_url = await redact_and_upload(document_id, file_bytes, pii_strings, correlation_id)
+                except Exception as exc:
+                    logger.warning({"documentId": document_id, "error": str(exc), "message": "Redaction skipped due to error"})
+            else:
+                logger.info({"documentId": document_id, "message": "No specific PII strings found by semantic agent"})
 
         # Step 5: Combine extracted data
         extracted_data = {
@@ -116,6 +124,7 @@ async def _process_message(msg_value: dict) -> None:
             "referenceNumber": extraction.reference_number,
             "keywords": extraction.keywords,
             "customFields": extraction.custom_fields,
+            "rawText": raw_text,
         }
 
         # Step 6: Route based on confidence threshold (INSTRUCTIONS.md rule)
@@ -210,6 +219,7 @@ async def start_consumer() -> None:
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         auto_offset_reset="earliest",
         enable_auto_commit=False,
+        request_timeout_ms=5000,
     )
     await consumer.start()
     _logger.info({"topic": settings.kafka_topic_document_parsed, "message": "AI agent consumer started"})
@@ -217,7 +227,7 @@ async def start_consumer() -> None:
     try:
         async for msg in consumer:
             try:
-                await _process_message(msg.value)
+                await process_analysis(msg.value)
                 await consumer.commit()
             except Exception as exc:
                 _logger.error({"error": str(exc), "message": "Failed to process AI analysis"})

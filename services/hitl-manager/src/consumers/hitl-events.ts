@@ -47,7 +47,8 @@ export async function startHitlConsumer(): Promise<void> {
             break;
           case KAFKA_TOPICS.HITL_REVIEW_REQUIRED:
           case KAFKA_TOPICS.HITL_PENDING:
-            taskType = HitlTaskType.AI_REVIEW;
+            // The hitl payload should define the actual taskType and role
+            taskType = payload.taskType ?? HitlTaskType.AI_REVIEW;
             assignedRole = payload.assignedRole ?? AssignedRole.CHUYEN_VIEN;
             break;
           case KAFKA_TOPICS.HITL_ESCALATION:

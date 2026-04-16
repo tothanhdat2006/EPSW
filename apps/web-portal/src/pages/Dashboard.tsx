@@ -39,7 +39,7 @@ export default function Dashboard() {
   const total = data?.total ?? 0;
 
   const stats = {
-    total,
+    total: total || 0,
     hitlPending: documents.filter((d) => d.status === 'HITL_REVIEW').length,
     slaBreaching: documents.filter((d) => d.slaDeadline && new Date(d.slaDeadline) < new Date()).length,
     approved: documents.filter((d) => d.status === 'APPROVED' || d.status === 'PUBLISHED').length,
@@ -118,7 +118,7 @@ export default function Dashboard() {
                       <PriorityBadge priority={doc.priority} />
                     </td>
                     <td className="px-6 py-4">
-                      {doc.aiConfidence !== undefined ? (
+                      {typeof doc.aiConfidence === 'number' ? (
                         <span
                           className={`font-medium ${
                             doc.aiConfidence >= 70 ? 'text-green-600' : 'text-red-600'

@@ -21,6 +21,26 @@ export async function ensureBucketExists(bucket: string): Promise<void> {
   const exists = await client.bucketExists(bucket);
   if (!exists) {
     await client.makeBucket(bucket, 'us-east-1');
+    
+    // Set public read policy for local dev preview
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Principal: { AWS: ['*'] },
+          Action: ['s3:GetBucketLocation', 's3:ListBucket'],
+          Resource: [`arn:aws:s3:::${bucket}`],
+        },
+        {
+          Effect: 'Allow',
+          Principal: { AWS: ['*'] },
+          Action: ['s3:GetObject'],
+          Resource: [`arn:aws:s3:::${bucket}/*`],
+        },
+      ],
+    };
+    await client.setBucketPolicy(bucket, JSON.stringify(policy));
   }
 }
 

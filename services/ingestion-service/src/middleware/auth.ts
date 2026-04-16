@@ -29,6 +29,11 @@ export async function requireAuth(
 ): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
+    if (config.nodeEnv === 'development') {
+      req.user = { sub: 'dev-user', preferred_username: 'developer', realm_access: { roles: ['ADMIN'] } };
+      next();
+      return;
+    }
     res.status(401).json({ error: 'Missing or invalid Authorization header' });
     return;
   }

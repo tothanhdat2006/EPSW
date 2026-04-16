@@ -34,6 +34,8 @@ export interface DocumentSummary {
   securityLevel: string;
   aiConfidence?: number;
   slaDeadline?: string;
+  rawFileUrl?: string;
+  redactedFileUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,8 +57,8 @@ export interface HitlTask {
 export const documentsApi = {
   list: (params?: { status?: string; priority?: string; page?: number }) =>
     apiClient.get<{ documents: DocumentSummary[]; total: number }>('/documents', { params }),
-  get: (trackingCode: string) =>
-    apiClient.get<DocumentSummary>(`/documents/${trackingCode}`),
+  get: (documentId: string) =>
+    apiClient.get<DocumentSummary>(`/documents/id/${documentId}`),
 };
 
 export const hitlApi = {
@@ -65,4 +67,11 @@ export const hitlApi = {
   claimTask: (taskId: string) => apiClient.post(`/hitl/tasks/${taskId}/claim`),
   resolveTask: (taskId: string, resolutionData: Record<string, unknown>) =>
     apiClient.post(`/hitl/tasks/${taskId}/resolve`, { resolutionData }),
+};
+
+export const aiApi = {
+  chat: (documentId: string, message: string, history: { role: string; content: string }[]) =>
+    apiClient.post<{ response: string }>('/ai/chat', { documentId, message, history }),
+  reAnalyze: (documentId: string, trackingCode: string, rawText: string) =>
+    apiClient.post('/ai/re-analyze', { documentId, trackingCode, rawText }),
 };

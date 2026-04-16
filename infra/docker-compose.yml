@@ -152,7 +152,7 @@ services:
     container_name: dvc-keycloak
     networks: [dvc-net]
     ports:
-      - "8080:8080"
+      - "8180:8080"
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/dvc_db
@@ -172,13 +172,13 @@ services:
 
   # ── Temporal.io ───────────────────────────────────────────────────────────
   temporal:
-    image: temporalio/auto-setup:1.25.2
+    image: temporalio/auto-setup:latest
     container_name: dvc-temporal
     networks: [dvc-net]
     ports:
       - "7233:7233"
     environment:
-      DB: postgresql
+      DB: postgres12
       DB_PORT: 5432
       POSTGRES_USER: dvc_user
       POSTGRES_PWD: dvc_password
@@ -203,7 +203,7 @@ services:
       - temporal
 
   temporal-admin-tools:
-    image: temporalio/admin-tools:1.25.2
+    image: temporalio/admin-tools:latest
     container_name: dvc-temporal-admin
     networks: [dvc-net]
     environment:

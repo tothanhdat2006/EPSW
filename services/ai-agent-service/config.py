@@ -23,15 +23,16 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://dvc_user:dvc_password@localhost:5432/dvc_db"
 
-    llm_model: str = "gpt-4o-mini"
-    openai_api_key: Optional[str] = None
+    llm_model: str = "qwen-plus"
+    dashscope_api_key: Optional[str] = None
     llm_temperature: float = 0.0
 
     # HITL confidence threshold per INSTRUCTIONS.md
     confidence_threshold: float = 70.0
 
     class Config:
-        env_file = ".env"
+        env_file = ["../../.env", ".env"]
+        extra = "ignore"
 
 
 settings = Settings()

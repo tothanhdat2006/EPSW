@@ -10,8 +10,10 @@ import {
 import type * as slaActivities from '../activities/sla.js';
 import type * as validationActivities from '../activities/validation.js';
 import type * as notificationActivities from '../activities/notification.js';
+import type * as aiActivities from '../activities/ai.js';
+import type * as pdfActivities from '../activities/pdf.js';
 
-const { setSlaDeadline, emitEscalationEvent } = proxyActivities<typeof slaActivities>({
+const { setSlaDeadline, emitEscalationEvent, emitLeaderApprovalEvent } = proxyActivities<typeof slaActivities>({
   startToCloseTimeout: '30 seconds',
   retry: { maximumAttempts: 3 },
 });
@@ -26,6 +28,16 @@ const { publishNotification, publishValidatedEvent } =
     startToCloseTimeout: '30 seconds',
     retry: { maximumAttempts: 3 },
   });
+
+const { generateExecutiveSummary, routeRejection } = proxyActivities<typeof aiActivities>({
+  startToCloseTimeout: '2 minutes', // AI queries take time
+  retry: { maximumAttempts: 3 },
+});
+
+const { generateFinalPdf } = proxyActivities<typeof pdfActivities>({
+  startToCloseTimeout: '30 seconds',
+  retry: { maximumAttempts: 3 },
+});
 
 // ── Signals (external events that resume the workflow) ────────────────────────
 export const approvalSignal = defineSignal<[{ approved: boolean; reason?: string; approvedBy: string }]>('approval');
@@ -59,8 +71,15 @@ export async function documentWorkflow(input: DocumentWorkflowInput): Promise<vo
     approvalResult = result;
   });
 
-  setHandler(hitlResolvedSignal, (_data) => {
+  setHandler(hitlResolvedSignal, (data) => {
     hitlResolved = true;
+    if (data.resolutionData && typeof data.resolutionData.approved === 'boolean') {
+      approvalResult = {
+        approved: data.resolutionData.approved as boolean,
+        reason: data.resolutionData.reason as string | undefined,
+        approvedBy: (data.resolutionData.resolvedBy as string) ?? 'Leader',
+      };
+    }
   });
 
   log.info('Document workflow started', { documentId, priority });
@@ -110,6 +129,21 @@ export async function documentWorkflow(input: DocumentWorkflowInput): Promise<vo
     currentStatus = 'VALIDATED';
   }
 
+  // Fetch the text/content of the document (assuming `extractedData.rawText` has it, or we rely on the activity fetching it from DB)
+  // For safety and size limits, AI activity pulls data from DB or we pass the available text.
+  let docText = 'Document content unavailable';
+  if (extractedData['rawText']) {
+    docText = String(extractedData['rawText']);
+  }
+
+  // Step 4.5: Generate Executive Summary for Leader
+  log.info('Generating executive summary', { documentId });
+  await generateExecutiveSummary(documentId, docText, correlationId);
+
+  // Emit the HITL task for Leader
+  await emitLeaderApprovalEvent(documentId, trackingCode, correlationId);
+  currentStatus = 'HITL_REVIEW'; // Leader review is technically a HITL step
+
   // Step 5: SLA monitoring + wait for approval
   const slaMs =
     priority === 'FLASH'
@@ -131,22 +165,37 @@ export async function documentWorkflow(input: DocumentWorkflowInput): Promise<vo
     }
   };
 
-  // Wait for approval signal (up to 30 days max)
-  const waitForApproval = async () => {
+  // Wait for hitl resolution from Leader (the UI should trigger /resolve endpoint)
+  // When Leader resolves it, `hitlResolved` becomes true and we extract the decision
+  const waitForApprovalFromHitl = async () => {
+    await condition(() => hitlResolved === true, '30 days');
+    // Once hitl is resolved, we expect approvalResult to be populated either through a dedicated signal,
+    // or by inspecting the DB manually in real life. Here, we assume the API sends both `hitlResolvedSignal` AND `approvalSignal`.
+  };
+
+  const waitForDirectApproval = async () => {
     await condition(() => approvalResult !== null, '30 days');
   };
 
-  await Promise.all([slaMonitor(), waitForApproval()]);
+  await Promise.race([waitForApprovalFromHitl(), waitForDirectApproval()]);
+  // Give it a tiny bit to process signals
+  await sleep(100);
 
   // Step 6: Route based on approval decision
-  if (!approvalResult || !approvalResult.approved) {
+  // If we only got hitl resolution but no explicit approvalResult, we default to reject
+  const result = approvalResult as { approved: boolean; reason?: string; approvedBy: string } | null;
+  if (!result || !result.approved) {
     currentStatus = 'REJECTED';
-    log.info('Document rejected by leader', { documentId, reason: approvalResult?.reason });
+    const rejectReason = result?.reason ?? 'Lãnh đạo từ chối hồ sơ không nêu lí do';
+    log.info('Document rejected by leader', { documentId, reason: rejectReason });
+
+    // AI Rejection Routing
+    const routingResult = await routeRejection(documentId, rejectReason, department, correlationId);
 
     await publishNotification(
       submitterId,
       `Hồ sơ ${trackingCode} bị từ chối`,
-      approvalResult?.reason ?? 'Lãnh đạo từ chối hồ sơ',
+      `${rejectReason}\n(Hồ sơ đã được chuyển trả về bộ phận: ${routingResult.routed_department})`,
       correlationId,
       documentId,
       trackingCode,
@@ -154,14 +203,16 @@ export async function documentWorkflow(input: DocumentWorkflowInput): Promise<vo
     return;
   }
 
-  // Step 7: Approve and publish
+  // Step 7: Approve and publish (Phase 6 Final loop)
   currentStatus = 'APPROVED';
-  log.info('Document approved', { documentId, approvedBy: approvalResult.approvedBy });
+  log.info('Document approved, generating final PDF', { documentId, approvedBy: result!.approvedBy });
+
+  const publishedFileUrl = await generateFinalPdf(documentId, correlationId);
 
   await publishNotification(
     submitterId,
     `Hồ sơ ${trackingCode} đã được phê duyệt`,
-    `Hồ sơ của bạn đã được phê duyệt bởi ${approvalResult.approvedBy}. Vui lòng kiểm tra kết quả trên cổng DVC.`,
+    `Hồ sơ của bạn đã được phê duyệt bởi ${result!.approvedBy}. Bạn có thể xem kết quả trực tuyến.\nURL bản điện tử: ${publishedFileUrl}`,
     correlationId,
     documentId,
     trackingCode,

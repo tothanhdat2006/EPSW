@@ -20,6 +20,7 @@ async def get_producer() -> AIOKafkaProducer:
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             enable_idempotence=True,
             acks="all",
+            request_timeout_ms=5000,
         )
         await _producer.start()
     return _producer

@@ -107,9 +107,60 @@ export function createDocumentRouter(logger: Logger): Router {
     }
   });
 
-  // GET /api/documents/:trackingCode — Track document status
+  // GET /api/documents — List documents with filtering
+  router.get('/', async (req: Request, res: Response) => {
+    const { status, priority, page = '1' } = req.query;
+    const pageSize = 10;
+    const skip = (Number(page) - 1) * pageSize;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (priority) where.priority = priority;
+
+    try {
+      const [documents, total] = await Promise.all([
+        prisma.document.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        prisma.document.count({ where }),
+      ]);
+
+      res.json({ documents, total });
+    } catch (err) {
+      logger.error({ err }, 'Failed to list documents');
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // GET /api/documents/id/:id — Get full document by ID (Internal use)
+  router.get('/id/:id', async (req: Request, res: Response) => {
+    const id = req.params['id'];
+    if (typeof id !== 'string') {
+      res.status(400).json({ error: 'Invalid ID' });
+      return;
+    }
+    const document = await prisma.document.findUnique({
+      where: { id },
+    });
+
+    if (!document) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    res.json(document);
+  });
+
+  // GET /api/documents/:trackingCode — Track document status (Public use)
   router.get('/:trackingCode', async (req: Request, res: Response) => {
-    const { trackingCode } = req.params;
+    const trackingCode = req.params['trackingCode'];
+    if (typeof trackingCode !== 'string') {
+      res.status(400).json({ error: 'Invalid tracking code' });
+      return;
+    }
     const document = await prisma.document.findUnique({
       where: { trackingCode },
       select: {
@@ -118,6 +169,8 @@ export function createDocumentRouter(logger: Logger): Router {
         status: true,
         priority: true,
         securityLevel: true,
+        aiConfidence: true,
+        extractedData: true,
         slaDeadline: true,
         createdAt: true,
         updatedAt: true,

@@ -1,5 +1,19 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "KAFKA_BROKERS",
+    "MINIO_ENDPOINT",
+    "MINIO_PORT",
+    "MINIO_ACCESS_KEY",
+    "MINIO_SECRET_KEY",
+    "KEYCLOAK_URL",
+    "TEMPORAL_ADDRESS",
+    "DASHSCOPE_API_KEY",
+    "LLM_MODEL",
+    "NODE_ENV",
+    "PORT"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
