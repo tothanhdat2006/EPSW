@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { prisma } from '@dvc/database';
+import { eq } from 'drizzle-orm';
+import { documents } from '../db/schema.js';
+import type { Database } from '../db/index.js';
 import type { Logger } from '@dvc/logger';
 import { chatWithDocumentContext } from '../services/ai.js';
 import { enqueueDocumentProcessing } from '../services/workflow.js';
@@ -17,7 +19,7 @@ const ReAnalyzeSchema = z.object({
   rawText: z.string().optional(),
 });
 
-export function createAiRouter(logger: Logger): Router {
+export function createAiRouter(db: Database, logger: Logger): Router {
   const router = Router();
 
   router.post('/chat', async (req: Request, res: Response) => {
@@ -30,13 +32,15 @@ export function createAiRouter(logger: Logger): Router {
     const { documentId, message, history } = parseResult.data;
 
     try {
-      const doc = await prisma.document.findUnique({ where: { id: documentId } });
+      const docResult = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+      const doc = docResult[0];
+      
       if (!doc) {
         res.status(404).json({ error: 'Document not found' });
         return;
       }
 
-      const context = (doc.extractedData as Record<string, unknown> | null) ?? {};
+      const context = (doc.extractedData ? JSON.parse(doc.extractedData) : {}) as Record<string, unknown>;
       const response = await chatWithDocumentContext(message, history, context);
       res.json({ response });
     } catch (err) {
@@ -54,7 +58,9 @@ export function createAiRouter(logger: Logger): Router {
 
     const { documentId } = parseResult.data;
 
-    const doc = await prisma.document.findUnique({ where: { id: documentId } });
+    const docResult = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+    const doc = docResult[0];
+    
     if (!doc) {
       res.status(404).json({ error: 'Document not found' });
       return;
@@ -67,7 +73,7 @@ export function createAiRouter(logger: Logger): Router {
       mimeType: doc.rawFileUrl.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
       submitterId: doc.submitterId,
       priority: doc.priority as any,
-      correlationId: req.correlationId ?? crypto.randomUUID(),
+      correlationId: (req as any).correlationId ?? crypto.randomUUID(),
     });
 
     res.json({ status: 'success', message: 'Re-analysis queued' });

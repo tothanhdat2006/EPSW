@@ -1,8 +1,9 @@
 import { Queue, Worker, QueueEvents, JobsOptions, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, withCorrelation } from '@dvc/logger';
-import { prisma } from '@dvc/database';
-import { Priority } from '@dvc/shared-types';
+import { eq, and, inArray, sql } from 'drizzle-orm';
+import { documents, hitlTasks, type Priority } from '../db/schema.js';
+import { getDb, type Database } from '../db/index.js';
 import { config } from '../config.js';
 import {
   downloadFile,
@@ -14,7 +15,7 @@ import {
   computeOverallConfidence,
   extractTextWithAlibabaOCR,
 } from './ai.js';
-import { sendEmail } from './notifications.js';
+import { emailService } from './email-service.js';
 
 const logger = createLogger({ service: 'core-api' });
 
@@ -41,16 +42,21 @@ interface SlaCheckJob {
 
 interface NotificationJob {
   recipientId: string;
+  email?: string;
+  name: string;
+  trackingCode: string;
   subject: string;
   body: string;
+  type: 'RECEIVED' | 'APPROVED' | 'REJECTED';
+  reason?: string;
   correlationId: string;
 }
 
 function getPriorityDelayMs(priority: Priority): number {
   switch (priority) {
-    case Priority.FLASH:
+    case 'FLASH':
       return 30 * 60 * 1000;
-    case Priority.URGENT:
+    case 'URGENT':
       return 2 * 60 * 60 * 1000;
     default:
       return 48 * 60 * 60 * 1000;
@@ -62,55 +68,57 @@ function computeSlaDeadline(priority: Priority): Date {
 }
 
 async function ensureTask(
+  db: Database,
   documentId: string,
   taskType: string,
   assignedRole: string,
 ): Promise<void> {
-  const existing = await prisma.hitlTask.findFirst({
-    where: {
+  const existing = await db.select()
+    .from(hitlTasks)
+    .where(
+      and(
+        eq(hitlTasks.documentId, documentId),
+        eq(hitlTasks.taskType, taskType),
+        inArray(hitlTasks.status, ['PENDING', 'IN_PROGRESS'])
+      )
+    )
+    .limit(1);
+
+  if (existing.length === 0) {
+    await db.insert(hitlTasks).values({
+      id: crypto.randomUUID(),
       documentId,
       taskType,
-      status: { in: ['PENDING', 'IN_PROGRESS'] },
-    },
-  });
-
-  if (!existing) {
-    await prisma.hitlTask.create({
-      data: {
-        documentId,
-        taskType,
-        assignedRole,
-        status: 'PENDING',
-      },
+      assignedRole,
+      status: 'PENDING',
     });
   }
 }
 
-async function processDocumentJob(data: ProcessDocumentJob): Promise<void> {
+async function processDocumentJob(db: Database, data: ProcessDocumentJob): Promise<void> {
   const reqLogger = withCorrelation(logger, data.correlationId, { documentId: data.documentId });
 
-  await prisma.document.update({
-    where: { id: data.documentId },
-    data: { status: 'PROCESSING' },
-  });
+  await db.update(documents)
+    .set({ status: 'PROCESSING', updatedAt: new Date() })
+    .where(eq(documents.id, data.documentId));
 
   const { bucket, objectKey } = parseObjectKeyFromUrl(data.rawFileUrl);
   const fileBytes = await downloadFile(bucket, objectKey);
   const rawText = await extractTextWithAlibabaOCR(data.rawFileUrl, data.mimeType, fileBytes);
 
   if (!rawText.trim()) {
-    await prisma.document.update({
-      where: { id: data.documentId },
-      data: {
+    await db.update(documents)
+      .set({
         status: 'HITL_REVIEW',
-        extractedData: {
+        updatedAt: new Date(),
+        extractedData: JSON.stringify({
           rawText,
           ocrError: 'UNREADABLE',
-        } as any,
-      },
-    });
+        }),
+      })
+      .where(eq(documents.id, data.documentId));
 
-    await ensureTask(data.documentId, 'OCR_FIX', 'VAN_THU');
+    await ensureTask(db, data.documentId, 'OCR_FIX', 'VAN_THU');
     reqLogger.warn('OCR produced empty text; routed to HITL OCR_FIX');
     return;
   }
@@ -139,37 +147,40 @@ async function processDocumentJob(data: ProcessDocumentJob): Promise<void> {
     rawText,
   };
 
-  if (aiConfidence < config.confidenceThreshold) {
-    await prisma.document.update({
-      where: { id: data.documentId },
-      data: {
-        status: 'HITL_REVIEW',
-        extractedData: extractedData as any,
-        aiConfidence,
-        securityLevel: analysis.securityLevel,
-      },
-    });
+  const doc = await db.select().from(documents).where(eq(documents.id, data.documentId)).limit(1);
+  const citizenEmail = doc[0]?.citizenEmail;
 
-    await ensureTask(data.documentId, 'AI_REVIEW', 'CHUYEN_VIEN');
+  if (aiConfidence < config.confidenceThreshold) {
+    await db.update(documents)
+      .set({
+        status: 'HITL_REVIEW',
+        extractedData: JSON.stringify(extractedData),
+        aiConfidence,
+        securityLevel: analysis.securityLevel as any,
+        updatedAt: new Date()
+      })
+      .where(eq(documents.id, data.documentId));
+
+    await ensureTask(db, data.documentId, 'AI_REVIEW', 'CHUYEN_VIEN');
     reqLogger.warn({ aiConfidence }, 'Confidence below threshold; routed to HITL AI_REVIEW');
     return;
   }
 
   const slaDeadline = computeSlaDeadline(data.priority);
 
-  await prisma.document.update({
-    where: { id: data.documentId },
-    data: {
+  await db.update(documents)
+    .set({
       status: 'VALIDATED',
-      extractedData: extractedData as any,
+      extractedData: JSON.stringify(extractedData),
       aiConfidence,
-      securityLevel: analysis.securityLevel,
+      securityLevel: analysis.securityLevel as any,
       assignedDept: analysis.department,
       slaDeadline,
-    },
-  });
+      updatedAt: new Date()
+    })
+    .where(eq(documents.id, data.documentId));
 
-  await ensureTask(data.documentId, 'LEADER_APPROVAL', 'LANH_DAO');
+  await ensureTask(db, data.documentId, 'LEADER_APPROVAL', 'LANH_DAO');
 
   await enqueueSlaCheck({
     documentId: data.documentId,
@@ -183,18 +194,23 @@ async function processDocumentJob(data: ProcessDocumentJob): Promise<void> {
 
   await enqueueNotification({
     recipientId: data.submitterId,
+    email: citizenEmail || undefined,
+    name: analysis.subjectName || 'Quý khách',
+    trackingCode: data.trackingCode,
     subject: `Ho so ${data.trackingCode} da duoc xac thuc`,
     body: `Ho so cua ban da qua buoc xu ly AI va dang cho phe duyet cuoi cung.`,
+    type: 'RECEIVED',
     correlationId: data.correlationId,
   });
 
   reqLogger.info({ aiConfidence }, 'Document validated and waiting for leader approval');
 }
 
-async function processSlaCheckJob(data: SlaCheckJob): Promise<void> {
+async function processSlaCheckJob(db: Database, data: SlaCheckJob): Promise<void> {
   const reqLogger = withCorrelation(logger, data.correlationId, { documentId: data.documentId });
 
-  const doc = await prisma.document.findUnique({ where: { id: data.documentId } });
+  const docs = await db.select().from(documents).where(eq(documents.id, data.documentId)).limit(1);
+  const doc = docs[0];
   if (!doc) {
     return;
   }
@@ -203,23 +219,34 @@ async function processSlaCheckJob(data: SlaCheckJob): Promise<void> {
     return;
   }
 
-  await ensureTask(data.documentId, 'MANAGER_ESCALATION', 'QUAN_LY');
-  await prisma.document.update({
-    where: { id: data.documentId },
-    data: { status: 'HITL_REVIEW' },
-  });
+  await ensureTask(db, data.documentId, 'MANAGER_ESCALATION', 'QUAN_LY');
+  await db.update(documents)
+    .set({ status: 'HITL_REVIEW', updatedAt: new Date() })
+    .where(eq(documents.id, data.documentId));
 
   reqLogger.warn('SLA breached, created MANAGER_ESCALATION task');
 }
 
 async function processNotificationJob(data: NotificationJob): Promise<void> {
-  const to = `${data.recipientId}@example.com`;
-  await sendEmail(to, data.subject, data.body);
+  const to = data.email || `${data.recipientId}@example.com`;
+  
+  if (data.type === 'RECEIVED') {
+    await emailService.notifyDocumentReceived(to, data.name, data.trackingCode);
+  } else if (data.type === 'APPROVED') {
+    await emailService.notifyDocumentApproved(to, data.name, data.trackingCode);
+  } else if (data.type === 'REJECTED') {
+    await emailService.notifyDocumentRejected(to, data.name, data.trackingCode, data.reason || 'Thông tin không hợp lệ');
+  }
 }
 
 let worker: Worker | null = null;
 
-export function startWorkflowWorker(): void {
+/**
+ * Note: dbInstance should be provided in worker context. 
+ * Since this is a shared file between Node/Express and Worker, 
+ * we handle db initialization carefully.
+ */
+export function startWorkflowWorker(dbInstance?: Database): void {
   if (worker) {
     return;
   }
@@ -227,13 +254,20 @@ export function startWorkflowWorker(): void {
   worker = new Worker(
     'document-workflow',
     async (job: Job) => {
+      // Logic for obtaining db instance if not provided (e.g. from global or binding)
+      const db = dbInstance;
+      if (!db) {
+        logger.error('Database instance NOT provided to worker');
+        return;
+      }
+
       if (job.name === 'process-document') {
-        await processDocumentJob(job.data as ProcessDocumentJob);
+        await processDocumentJob(db, job.data as ProcessDocumentJob);
         return;
       }
 
       if (job.name === 'sla-check') {
-        await processSlaCheckJob(job.data as SlaCheckJob);
+        await processSlaCheckJob(db, job.data as SlaCheckJob);
         return;
       }
 
@@ -305,96 +339,113 @@ export async function enqueueNotification(
 }
 
 export async function markDocumentApproved(
+  db: Database,
   documentId: string,
   approvedBy: string,
   correlationId: string,
 ): Promise<void> {
-  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  const docs = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+  const doc = docs[0];
   if (!doc) {
     throw new Error('Document not found');
   }
 
-  const extracted = (doc.extractedData as Record<string, unknown> | null) ?? {};
+  const extracted = doc.extractedData ? (JSON.parse(doc.extractedData) as Record<string, unknown>) : {};
 
   await ensureBucketExists(config.minio.bucketPublished);
   const publishedFileUrl = `${config.minio.useSSL ? 'https' : 'http'}://${config.minio.endPoint}:${config.minio.port}/${config.minio.bucketPublished}/${documentId}/result.json`;
 
-  await prisma.document.update({
-    where: { id: documentId },
-    data: {
+  await db.update(documents)
+    .set({
       status: 'PUBLISHED',
-      extractedData: {
+      updatedAt: new Date(),
+      extractedData: JSON.stringify({
         ...extracted,
         approvedBy,
         publishedFileUrl,
         approvedAt: new Date().toISOString(),
-      } as any,
-    },
-  });
+      }),
+    })
+    .where(eq(documents.id, documentId));
 
-  await prisma.hitlTask.updateMany({
-    where: {
-      documentId,
-      taskType: 'LEADER_APPROVAL',
-      status: { in: ['PENDING', 'IN_PROGRESS'] },
-    },
-    data: {
+  await db.update(hitlTasks)
+    .set({
       status: 'RESOLVED',
-      resolutionData: { approved: true, approvedBy } as any,
       resolvedAt: new Date(),
-    },
-  });
+      resolutionData: JSON.stringify({ approved: true, approvedBy }),
+    })
+    .where(
+      and(
+        eq(hitlTasks.documentId, documentId),
+        eq(hitlTasks.taskType, 'LEADER_APPROVAL'),
+        inArray(hitlTasks.status, ['PENDING', 'IN_PROGRESS'])
+      )
+    );
 
   await enqueueNotification({
     recipientId: doc.submitterId,
+    email: doc.citizenEmail || undefined,
+    name: (extracted.subjectName as string) || 'Quý khách',
+    trackingCode: doc.trackingCode,
     subject: `Ho so ${doc.trackingCode} da duoc phe duyet`,
     body: `Ho so da duoc phe duyet boi ${approvedBy}. Ket qua da duoc phat hanh.`,
+    type: 'APPROVED',
     correlationId,
   });
 }
 
 export async function markDocumentRejected(
+  db: Database,
   documentId: string,
   reason: string,
   rejectedBy: string,
   correlationId: string,
 ): Promise<void> {
-  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  const docs = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+  const doc = docs[0];
   if (!doc) {
     throw new Error('Document not found');
   }
 
-  await prisma.document.update({
-    where: { id: documentId },
-    data: {
+  const extracted = doc.extractedData ? (JSON.parse(doc.extractedData) as Record<string, unknown>) : {};
+
+  await db.update(documents)
+    .set({
       status: 'REJECTED',
-      extractedData: {
-        ...(doc.extractedData as Record<string, unknown> | null),
+      updatedAt: new Date(),
+      extractedData: JSON.stringify({
+        ...extracted,
         rejectionReason: reason,
         rejectedBy,
-      } as any,
-    },
-  });
+      }),
+    })
+    .where(eq(documents.id, documentId));
 
-  await prisma.hitlTask.updateMany({
-    where: {
-      documentId,
-      taskType: 'LEADER_APPROVAL',
-      status: { in: ['PENDING', 'IN_PROGRESS'] },
-    },
-    data: {
+  await db.update(hitlTasks)
+    .set({
       status: 'RESOLVED',
-      resolutionData: { approved: false, reason, rejectedBy } as any,
       resolvedAt: new Date(),
-    },
-  });
+      resolutionData: JSON.stringify({ approved: false, reason, rejectedBy }),
+    })
+    .where(
+      and(
+        eq(hitlTasks.documentId, documentId),
+        eq(hitlTasks.taskType, 'LEADER_APPROVAL'),
+        inArray(hitlTasks.status, ['PENDING', 'IN_PROGRESS'])
+      )
+    );
 
-  await ensureTask(documentId, 'THU_KY_REVIEW', 'THU_KY');
+  await ensureTask(db, documentId, 'THU_KY_REVIEW', 'THU_KY');
 
   await enqueueNotification({
     recipientId: doc.submitterId,
+    email: doc.citizenEmail || undefined,
+    name: (extracted.subjectName as string) || 'Quý khách',
+    trackingCode: doc.trackingCode,
     subject: `Ho so ${doc.trackingCode} bi tu choi`,
     body: `Ly do tu choi: ${reason}`,
+    type: 'REJECTED',
+    reason,
     correlationId,
   });
 }

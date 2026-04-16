@@ -3,15 +3,18 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createLogger } from '@dvc/logger';
-import { disconnectPrisma } from '@dvc/database';
 import { config } from './config.js';
 import { correlationIdMiddleware, optionalAuth, requireAuth } from './middleware/auth.js';
 import { createDocumentsRouter } from './routes/documents.js';
 import { createHitlRouter } from './routes/hitl.js';
 import { createAiRouter } from './routes/ai.js';
 import { startWorkflowWorker, stopWorkflowWorker } from './services/workflow.js';
+import { getLocalDb } from './db/index.js';
 
 const logger = createLogger({ service: 'core-api' });
+
+// Initialize local DB for Node process
+const db = getLocalDb();
 
 const app = express();
 
@@ -24,16 +27,17 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'core-api' });
 });
 
-app.use('/api/documents', optionalAuth, createDocumentsRouter(logger));
-app.use('/api/hitl', requireAuth, createHitlRouter(logger));
-app.use('/api/ai', requireAuth, createAiRouter(logger));
+app.use('/api/documents', optionalAuth, createDocumentsRouter(db, logger));
+app.use('/api/hitl', requireAuth, createHitlRouter(db, logger));
+app.use('/api/ai', requireAuth, createAiRouter(db, logger));
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({ err }, 'Unhandled error');
   res.status(500).json({ error: 'Internal server error' });
 });
 
-startWorkflowWorker();
+// Pass db to the workflow worker as well
+startWorkflowWorker(db);
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port, env: config.nodeEnv }, 'Core API started');
@@ -43,7 +47,6 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutting down gracefully');
   server.close(async () => {
     await stopWorkflowWorker();
-    await disconnectPrisma();
     process.exit(0);
   });
 }

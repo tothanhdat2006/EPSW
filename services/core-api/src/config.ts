@@ -29,9 +29,7 @@ export const config = {
     apiKey: process.env['LLM_API_KEY'] ?? process.env['OPENAI_API_KEY'] ?? '',
     baseUrl:
       process.env['LLM_BASE_URL'] ??
-      ((process.env['LLM_PROVIDER'] ?? '').toLowerCase() === 'openai'
-        ? undefined
-        : 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
+      'https://ws-8osuain4x6tm96th.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
     ocrModel: process.env['ALIBABA_OCR_MODEL'] ?? 'qwen-vl-max-latest',
     temperature: parseFloat(process.env['LLM_TEMPERATURE'] ?? '0.2'),
   },

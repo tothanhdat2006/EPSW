@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { prisma } from '@dvc/database';
-import { Priority } from '@dvc/shared-types';
+import { eq, and, desc, sql } from 'drizzle-orm';
+import { documents } from '../db/schema.js';
+import type { Database } from '../db/index.js';
 import { withCorrelation } from '@dvc/logger';
 import type { Logger } from '@dvc/logger';
 import { config } from '../config.js';
@@ -15,7 +16,8 @@ import {
 } from '../services/workflow.js';
 
 const SubmitDocumentSchema = z.object({
-  priority: z.nativeEnum(Priority).optional().default(Priority.NORMAL),
+  priority: z.enum(['NORMAL', 'URGENT', 'FLASH']).optional().default('NORMAL'),
+  email: z.string().email().optional(),
 });
 
 const ApproveSchema = z.object({
@@ -23,7 +25,7 @@ const ApproveSchema = z.object({
   reason: z.string().optional(),
 });
 
-export function createDocumentsRouter(logger: Logger): Router {
+export function createDocumentsRouter(db: Database, logger: Logger): Router {
   const router = Router();
 
   const upload = multer({
@@ -39,7 +41,7 @@ export function createDocumentsRouter(logger: Logger): Router {
   });
 
   router.post('/', upload.single('file'), async (req: Request, res: Response) => {
-    const correlationId = req.correlationId ?? uuidv4();
+    const correlationId = (req as any).correlationId ?? uuidv4();
     const reqLogger = withCorrelation(logger, correlationId);
 
     const file = req.file;
@@ -54,8 +56,8 @@ export function createDocumentsRouter(logger: Logger): Router {
       return;
     }
 
-    const { priority } = parseResult.data;
-    const submitterId = req.user?.sub ?? 'anonymous';
+    const { priority, email } = parseResult.data;
+    const submitterId = (req as any).user?.sub ?? 'anonymous';
     const documentId = uuidv4();
     const trackingCode = `DVC-${Date.now()}-${documentId.slice(0, 8).toUpperCase()}`;
     const objectKey = `${documentId}/${file.originalname}`;
@@ -68,15 +70,14 @@ export function createDocumentsRouter(logger: Logger): Router {
         file.mimetype,
       );
 
-      await prisma.document.create({
-        data: {
-          id: documentId,
-          trackingCode,
-          submitterId,
-          priority,
-          status: 'RECEIVED',
-          rawFileUrl,
-        },
+      await db.insert(documents).values({
+        id: documentId,
+        trackingCode,
+        submitterId,
+        citizenEmail: email || null,
+        priority: priority as any,
+        status: 'RECEIVED',
+        rawFileUrl,
       });
 
       await enqueueDocumentProcessing({
@@ -85,11 +86,11 @@ export function createDocumentsRouter(logger: Logger): Router {
         rawFileUrl,
         mimeType: file.mimetype,
         submitterId,
-        priority,
+        priority: priority as any,
         correlationId,
       });
 
-      reqLogger.info({ documentId, trackingCode }, 'Document received and queued in BullMQ');
+      reqLogger.info({ documentId, trackingCode, email }, 'Document received and queued in BullMQ');
 
       res.status(202).json({
         message: 'Document received. Processing has started.',
@@ -106,23 +107,27 @@ export function createDocumentsRouter(logger: Logger): Router {
   router.get('/', async (req: Request, res: Response) => {
     const { status, priority, page = '1' } = req.query;
     const pageSize = 10;
-    const skip = (Number(page) - 1) * pageSize;
+    const offset = (Number(page) - 1) * pageSize;
 
-    const where: Record<string, unknown> = {};
-    if (status) where['status'] = status;
-    if (priority) where['priority'] = priority;
+    const conditions: any[] = [];
+    if (status) conditions.push(eq(documents.status, status as any) as any);
+    if (priority) conditions.push(eq(documents.priority, priority as any) as any);
+    
+    const whereClause = conditions.length > 0 ? (and(...conditions) as any) : undefined;
 
-    const [documents, total] = await Promise.all([
-      prisma.document.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      prisma.document.count({ where }),
+    const [docs, totalResult] = await Promise.all([
+      (db as any).select()
+        .from(documents as any)
+        .where(whereClause)
+        .orderBy(desc(documents.createdAt) as any)
+        .limit(pageSize)
+        .offset(offset),
+      (db as any).select({ count: sql`count(*)` })
+        .from(documents as any)
+        .where(whereClause),
     ]);
 
-    res.json({ documents, total });
+    res.json({ documents: docs, total: Number((totalResult[0] as any)?.count ?? 0) });
   });
 
   router.get('/id/:id', async (req: Request, res: Response) => {
@@ -132,7 +137,9 @@ export function createDocumentsRouter(logger: Logger): Router {
       return;
     }
 
-    const document = await prisma.document.findUnique({ where: { id } });
+    const docResult = await (db as any).select().from(documents as any).where(eq(documents.id, id) as any).limit(1);
+    const document = docResult[0];
+    
     if (!document) {
       res.status(404).json({ error: 'Document not found' });
       return;
@@ -155,14 +162,14 @@ export function createDocumentsRouter(logger: Logger): Router {
     }
 
     const { approved, reason } = parseResult.data;
-    const actor = req.user?.preferred_username ?? req.user?.sub ?? 'system';
-    const correlationId = req.correlationId ?? uuidv4();
+    const actor = (req as any).user?.preferred_username ?? (req as any).user?.sub ?? 'system';
+    const correlationId = (req as any).correlationId ?? uuidv4();
 
     try {
       if (approved) {
-        await markDocumentApproved(documentId, actor, correlationId);
+        await markDocumentApproved(db, documentId, actor, correlationId);
       } else {
-        await markDocumentRejected(documentId, reason ?? 'Rejected by leader', actor, correlationId);
+        await markDocumentRejected(db, documentId, reason ?? 'Rejected by leader', actor, correlationId);
       }
       res.json({ message: approved ? 'Document approved' : 'Document rejected' });
     } catch (err) {
@@ -178,23 +185,12 @@ export function createDocumentsRouter(logger: Logger): Router {
       return;
     }
 
-    const document = await prisma.document.findUnique({
-      where: { trackingCode },
-      select: {
-        id: true,
-        trackingCode: true,
-        status: true,
-        priority: true,
-        securityLevel: true,
-        aiConfidence: true,
-        extractedData: true,
-        slaDeadline: true,
-        createdAt: true,
-        updatedAt: true,
-        rawFileUrl: true,
-        redactedFileUrl: true,
-      },
-    });
+    const docs = await db.select()
+      .from(documents)
+      .where(eq(documents.trackingCode, trackingCode))
+      .limit(1);
+    
+    const document = docs[0];
 
     if (!document) {
       res.status(404).json({ error: 'Document not found' });
