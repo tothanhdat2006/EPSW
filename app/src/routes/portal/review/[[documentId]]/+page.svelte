@@ -1,30 +1,22 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import {
-		Shield,
-		Brain,
-		Calendar,
-		User,
-		Building,
-		ExternalLink,
-		FileText,
-		ImageIcon,
-		Save,
-		Sparkles,
-		MessageSquare,
-		Send,
-		Loader2,
-		RotateCw,
-		X
+		Shield, Brain, Calendar, User, Building, ExternalLink, FileText,
+		ImageIcon, Save, Sparkles, MessageSquare, Send, Loader2, RotateCw, X
 	} from 'lucide-svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import { documentsApi, aiApi } from '$lib/api/client';
 	import type { DocumentSummary } from '$lib/api/types';
 
+	import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '$lib/components/ui/card';
+	import { ScrollArea } from '$lib/components/ui/scroll-area';
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
+	import { Label } from '$lib/components/ui/label';
+
 	// ─── Props ────────────────────────────────────────────────────────────────
 
-	// [[documentId]] — optional param from the URL
 	const documentId = $derived(page.params.documentId ?? null);
 
 	// ─── State ────────────────────────────────────────────────────────────────
@@ -117,313 +109,331 @@
 </script>
 
 <svelte:head>
-	<title>Kiểm duyệt hồ sơ — DVC Portal</title>
+	<title>Inspector — DVC AI Enterprise</title>
 </svelte:head>
 
 {#if !documentId}
 	<div class="flex h-full items-center justify-center p-8">
-		<p class="text-gray-400">Chọn một hồ sơ từ Dashboard để xem chi tiết</p>
+		<p class="text-muted-foreground font-medium">Bấm vào một hồ sơ từ Mission Control để xem chi tiết</p>
 	</div>
 {:else if isLoading}
-	<div class="p-8 text-gray-400">Đang tải...</div>
+	<div class="flex h-full items-center justify-center p-8 flex-col gap-4">
+		<Loader2 size={32} class="animate-spin text-primary" />
+		<p class="text-primary font-medium tracking-wide">Đang nạp dữ liệu không gian 3 chiều...</p>
+	</div>
 {:else if !document}
-	<div class="p-8 text-red-500">Không tìm thấy hồ sơ</div>
+	<div class="flex h-full items-center justify-center p-8">
+		<p class="text-destructive font-bold text-lg">Cảnh báo: Không tìm thấy hồ sơ hệ thống</p>
+	</div>
 {:else}
-	<div class="flex h-full flex-col bg-gray-50">
+	<div class="flex h-full flex-col bg-background/50">
 		<!-- Header -->
-		<header class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-8 py-4 shadow-sm">
-			<div class="flex items-center gap-4">
+		<header class="sticky top-0 z-10 flex items-center justify-between border-b border-border/60 bg-muted/30 backdrop-blur-3xl px-8 py-4 shadow-xl">
+			<div class="flex items-center gap-5">
 				<div>
-					<h1 class="flex items-center gap-2 text-xl font-bold text-gray-900">
-						<Sparkles class="text-blue-500" size={20} /> Kiểm duyệt hồ sơ
+					<h1 class="flex items-center gap-2 text-xl font-extrabold tracking-tight text-foreground">
+						<Sparkles class="text-primary" size={20} /> AI Inspector
 					</h1>
-					<p class="mt-0.5 font-mono text-xs text-blue-700">{document.trackingCode}</p>
+					<p class="mt-0.5 font-mono text-xs font-semibold text-primary">{document.trackingCode}</p>
 				</div>
-				<div class="mx-1 h-8 w-px bg-gray-200"></div>
-				<div class="flex items-center gap-2">
+				<div class="h-8 w-px bg-border"></div>
+				<div class="flex items-center gap-3">
 					<PriorityBadge priority={document.priority} />
 					<StatusBadge status={document.status} />
 				</div>
 			</div>
 
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-4">
 				{#if document.redactedFileUrl}
-					<div class="mr-2 flex rounded-lg border border-gray-200 bg-gray-100 p-1">
-						<button
+					<div class="flex rounded-lg border border-border/50 bg-background/50 p-1 backdrop-blur-md">
+						<Button
+							variant={!showRedacted ? 'secondary' : 'ghost'}
+							size="sm"
 							onclick={() => (showRedacted = false)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-all
-								{!showRedacted ? 'bg-white text-blue-600 shadow' : 'text-gray-500 hover:text-gray-700'}"
+							class={!showRedacted ? 'bg-background shadow-md' : 'hover:bg-transparent text-muted-foreground hover:text-foreground'}
 						>
-							Gốc
-						</button>
-						<button
+							Bản Root
+						</Button>
+						<Button
+							variant={showRedacted ? 'secondary' : 'ghost'}
+							size="sm"
 							onclick={() => (showRedacted = true)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-all
-								{showRedacted ? 'bg-white text-blue-600 shadow' : 'text-gray-500 hover:text-gray-700'}"
+							class={showRedacted ? 'bg-background shadow-md' : 'hover:bg-transparent text-muted-foreground hover:text-foreground'}
 						>
-							Đã che
-						</button>
+							Bản Masked-PII
+						</Button>
 					</div>
 				{/if}
-				<button
+				<Button
 					disabled={Object.keys(editedData).length === 0 || isSaving}
-					class="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium
-						text-white shadow-md transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+					size="sm"
+					class="gap-2 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/20"
 				>
-					<Save size={16} /> Lưu chỉnh sửa
-				</button>
+					<Save size={16} /> Đồng bộ Data
+				</Button>
 			</div>
 		</header>
 
-		<div class="flex flex-1 overflow-hidden">
+		<div class="flex flex-1 overflow-hidden p-6 gap-6">
 			<!-- Left: File viewer -->
-			<div class="flex flex-1 flex-col overflow-hidden p-6">
+			<Card class="flex flex-1 flex-col overflow-hidden glass-card shadow-2xl relative group">
 				{#if !currentFileUrl}
 					<div
-						class="flex h-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-100 p-12 text-gray-400"
+						class="flex h-full flex-col items-center justify-center bg-muted/10 p-12 text-muted-foreground"
 					>
 						<FileText size={48} class="mb-4 opacity-20" />
-						<p>Không có file đính kèm</p>
+						<p>Không có Data Object Mapping</p>
 					</div>
 				{:else}
 					{@const isPdf = currentFileUrl.toLowerCase().endsWith('.pdf')}
-					<div
-						class="flex min-h-[600px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
-					>
-						<!-- File bar -->
-						<div class="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
-							<div class="flex items-center gap-2">
+					<!-- File bar -->
+					<div class="flex items-center justify-between border-b border-border/40 bg-muted/40 px-4 py-3 backdrop-blur-md z-10">
+						<div class="flex items-center gap-3">
+							<div class="p-1.5 rounded-md bg-background border border-border/50">
 								{#if isPdf}
-									<FileText size={16} class="text-red-500" />
+									<FileText size={16} class="text-rose-500" />
 								{:else}
 									<ImageIcon size={16} class="text-blue-500" />
 								{/if}
-								<span class="text-sm font-semibold text-gray-700">
-									{showRedacted ? 'Bản đã che PII' : 'Bản gốc'}
-								</span>
 							</div>
-							<a
-								href={currentFileUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-200"
-								title="Mở trong tab mới"
-							>
-								<ExternalLink size={16} />
-							</a>
+							<span class="text-sm font-bold tracking-wide uppercase text-foreground">
+								{showRedacted ? 'Visual Masked' : 'Visual Origin'}
+							</span>
 						</div>
-						<div class="flex flex-1 items-center justify-center overflow-auto bg-gray-800 p-4">
-							{#if isPdf}
-								<iframe src={currentFileUrl} title="Tài liệu hồ sơ" class="h-full w-full rounded border-none bg-white shadow-lg"></iframe>
-							{:else}
-								<img
-									src={currentFileUrl}
-									alt="Tài liệu hồ sơ"
-									class="h-auto max-w-full rounded shadow-2xl transition-transform duration-300 hover:scale-105"
-								/>
-							{/if}
-						</div>
+						<Button
+							href={currentFileUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							variant="ghost"
+							size="icon"
+							class="text-muted-foreground hover:bg-primary/20 hover:text-primary rounded-lg transition-colors"
+						>
+							<ExternalLink size={18} />
+						</Button>
+					</div>
+					<div class="flex flex-1 relative items-center justify-center overflow-auto bg-muted/10 p-4">
+						<div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/5 via-background to-background pointer-events-none"></div>
+						{#if isPdf}
+							<iframe src={currentFileUrl} title="Tài liệu hồ sơ" class="h-full w-full rounded-lg border border-border/50 bg-background shadow-2xl z-10 relative"></iframe>
+						{:else}
+							<img
+								src={currentFileUrl}
+								alt="Tài liệu hồ sơ"
+								class="h-auto max-w-full rounded-lg shadow-2xl border border-border/50 relative z-10 ring-4 ring-background transition-transform duration-500 group-hover:scale-[1.01]"
+							/>
+						{/if}
 					</div>
 				{/if}
-			</div>
+			</Card>
 
 			<!-- Right: Insights sidebar -->
-			<aside class="w-[440px] space-y-6 overflow-y-auto border-l border-gray-200 bg-gray-50 p-6">
+			<aside class="w-[480px] shrink-0 space-y-6 overflow-y-auto">
 				<!-- AI panel -->
-				<section class="space-y-3">
-					<div class="flex items-center justify-between">
-						<h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-							<MessageSquare size={14} /> Nhận định từ AI (Qwen)
+				<section class="space-y-4">
+					<div class="flex items-center justify-between px-1">
+						<h2 class="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-primary">
+							<MessageSquare size={14} /> Cognitive AI (Qwen)
 						</h2>
 						<div class="flex gap-2">
-							<button
+							<Button
+								variant="ghost"
+								size="icon"
 								onclick={reAnalyze}
 								disabled={isReAnalyzing}
-								class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-blue-500"
-								title="Tái phân tích hồ sơ"
+								class="h-8 w-8 hover:bg-primary/20 text-muted-foreground hover:text-primary"
+								title="Force Re-compute OCR"
 							>
-								<RotateCw size={14} class={isReAnalyzing ? 'animate-spin' : ''} />
-							</button>
-							<button
+								<RotateCw size={14} class={isReAnalyzing ? 'animate-spin text-primary' : ''} />
+							</Button>
+							<Button
+								variant={showChat ? 'secondary' : 'ghost'}
+								size="icon"
 								onclick={() => (showChat = !showChat)}
-								class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-blue-500
-									{showChat ? 'bg-blue-50 text-blue-500 shadow-inner' : ''}"
-								title="Chat với AI"
+								class="h-8 w-8 {showChat ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-primary/20 hover:text-primary'}"
+								title="Toggle Neural Chat"
 							>
 								<MessageSquare size={14} />
-							</button>
+							</Button>
 						</div>
 					</div>
 
 					<!-- AI summary card -->
-					<div class="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
-						<div class="absolute top-0 right-0 p-1 opacity-10">
-							<Brain size={40} class="text-blue-500" />
+					<Card class="glass-card shadow-lg relative overflow-hidden group">
+						<div class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+						<div class="absolute -right-4 -top-4 opacity-10 transition-transform group-hover:rotate-12 group-hover:scale-125 duration-700 pointer-events-none">
+							<Brain size={100} class="text-primary" />
 						</div>
-						<div class="flex gap-3">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600">
-								<Brain size={16} class="text-white" />
-							</div>
-							<div class="space-y-2">
-								<p class="text-sm font-medium leading-relaxed text-gray-700">
-									Chào Admin! Tôi đã phân tích hồ sơ này. Đây là một bản <strong
-										>{extracted['documentType'] || 'Hồ sơ chưa xác định'}</strong
-									>.
-								</p>
-								<p class="text-sm italic text-gray-600">
-									{extracted['summary']
-										? `"${extracted['summary']}"`
-										: 'Tôi đã tự động điền các trường thông tin trích xuất được bên dưới để bạn đối soát.'}
-								</p>
-								<div class="flex items-center gap-3 pt-2">
-									<span
-										class="rounded-full px-2 py-0.5 text-[10px] font-bold
-											{(document.aiConfidence ?? 0) >= 70 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}"
-									>
-										Độ tin cậy: {(document.aiConfidence ?? 0).toFixed(1)}%
-									</span>
-									<span class="text-[10px] text-gray-400">Qwen-3.5-Plus</span>
+						<CardContent class="p-5">
+							<div class="flex gap-4 relative z-10">
+								<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20 border border-primary/30 shadow-inner">
+									<Brain size={20} class="text-primary animate-pulse" />
+								</div>
+								<div class="space-y-2">
+									<p class="text-sm font-semibold leading-relaxed text-foreground">
+										Nhận diện thành công: <span class="text-primary tracking-wide">{(extracted['documentType'] || 'UNKNOWN').toUpperCase()}</span>
+									</p>
+									<p class="text-[13px] italic text-muted-foreground/90 font-medium">
+										{extracted['summary']
+											? `"${extracted['summary']}"`
+											: 'Data mapping đã hoàn tất. Vui lòng đối soát các tham số trích xuất bên dưới trước khi đồng bộ.'}
+									</p>
+									<div class="flex items-center gap-3 pt-3">
+										<div class="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-[10px] font-bold border
+												{(document.aiConfidence ?? 0) >= 70 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500' : 'border-red-500/30 bg-red-500/10 text-red-500'}"
+										>
+											<Sparkles size={10} /> Confidence: {(document.aiConfidence ?? 0).toFixed(1)}%
+										</div>
+										<span class="text-[9px] font-mono font-semibold tracking-wider text-muted-foreground uppercase opacity-80 border-b border-muted-foreground/30 border-dashed pb-px">Qwen-3.5-MAX</span>
+									</div>
 								</div>
 							</div>
-						</div>
-					</div>
+						</CardContent>
+					</Card>
 
 					<!-- Chat drawer -->
 					{#if showChat}
-						<div
-							class="mt-4 flex h-[400px] flex-col overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-xl"
-						>
-							<div class="flex items-center justify-between bg-blue-600 p-3 text-white">
-								<div class="flex items-center gap-2">
-									<Sparkles size={14} />
-									<span class="text-xs font-bold">Qwen Assistant</span>
+						<Card class="glass-card shadow-2xl overflow-hidden mt-4 animate-in fade-in slide-in-from-top-4 duration-300 border-primary/30">
+							<div class="flex items-center justify-between bg-primary/10 border-b border-primary/20 backdrop-blur-md p-3">
+								<div class="flex items-center gap-2 text-primary">
+									<Sparkles size={16} />
+									<span class="text-xs font-bold tracking-widest uppercase">Qwen Neural Link</span>
 								</div>
-								<button
+								<Button
+									variant="ghost" size="icon"
 									onclick={() => (showChat = false)}
-									class="rounded p-1 transition-colors hover:bg-blue-700"
+									class="h-6 w-6 text-primary hover:bg-primary/20 hover:text-primary rounded-full transition-colors"
 								>
 									<X size={14} />
-								</button>
+								</Button>
 							</div>
 
-							<div class="flex-1 space-y-4 overflow-y-auto bg-gray-50 p-4">
-								{#if chatHistory.length === 0 && !isChatLoading}
-									<div class="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-[13px] leading-relaxed text-blue-800 shadow-sm">
-										Chào bạn! Tôi sẵn sàng giải đáp các thắc mắc về nội dung hồ sơ này. Bạn cần tôi hỗ trợ gì?
-									</div>
-								{/if}
-								{#each chatHistory as chat}
-									<div class="flex {chat.role === 'user' ? 'justify-end' : 'justify-start'}">
-										<div
-											class="max-w-[85%] rounded-2xl p-3 text-[13px] leading-relaxed shadow-sm
-												{chat.role === 'user'
-												? 'rounded-tr-none bg-blue-600 text-white'
-												: chat.content.startsWith('Lỗi:')
-													? 'rounded-tl-none border border-red-100 bg-red-50 text-red-700'
-													: 'rounded-tl-none border border-gray-100 bg-white text-gray-700'}"
-										>
-											{chat.content}
+							<ScrollArea class="h-[280px] bg-background/40">
+								<div class="p-4 space-y-4">
+									{#if chatHistory.length === 0 && !isChatLoading}
+										<div class="rounded-xl border border-primary/20 bg-primary/5 p-4 text-[13px] font-medium leading-relaxed text-foreground shadow-sm max-w-[90%]">
+											Kênh kết nối bảo mật đã thiết lập. Bạn cần truy vấn thông tin gì từ hồ sơ này?
 										</div>
-									</div>
-								{/each}
-								{#if isChatLoading}
-									<div class="flex justify-start">
-										<div class="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-											<Loader2 size={16} class="animate-spin text-blue-500" />
+									{/if}
+									{#each chatHistory as chat}
+										<div class="flex {chat.role === 'user' ? 'justify-end' : 'justify-start'}">
+											<div
+												class="max-w-[85%] rounded-2xl p-3.5 text-[13px] font-medium leading-relaxed shadow-md
+													{chat.role === 'user'
+													? 'rounded-tr-none bg-primary text-primary-foreground'
+													: chat.content.startsWith('Lỗi:')
+														? 'rounded-tl-none border border-destructive/30 bg-destructive/10 text-destructive'
+														: 'rounded-tl-none border border-border/50 bg-muted/50 text-foreground backdrop-blur-sm'}"
+											>
+												{chat.content}
+											</div>
 										</div>
-									</div>
-								{/if}
-							</div>
+									{/each}
+									{#if isChatLoading}
+										<div class="flex justify-start">
+											<div class="rounded-2xl rounded-tl-none border border-border/30 bg-muted/30 p-3.5 shadow-sm backdrop-blur-sm">
+												<Loader2 size={16} class="animate-spin text-primary" />
+											</div>
+										</div>
+									{/if}
+								</div>
+							</ScrollArea>
 
-							<div class="border-t border-gray-100 bg-white p-3">
+							<div class="border-t border-primary/20 bg-muted/20 p-3 backdrop-blur-md">
 								<form
 									onsubmit={(e) => {
 										e.preventDefault();
 										sendChat();
 									}}
-									class="flex gap-2"
+									class="flex gap-2 items-center"
 								>
-									<input
+									<Input
 										type="text"
 										bind:value={chatMessage}
-										placeholder="Hỏi AI về hồ sơ..."
-										class="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500"
+										placeholder="Nhập truy vấn..."
+										class="flex-1 rounded-xl bg-background border-border focus-visible:ring-primary shadow-inner"
 									/>
-									<button
+									<Button
 										type="submit"
 										disabled={isChatLoading || !chatMessage.trim()}
-										class="rounded-xl bg-blue-600 p-2 text-white shadow-md transition-all hover:bg-blue-700 active:scale-90 disabled:opacity-50"
+										size="icon"
+										class="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all disabled:opacity-50 shrink-0"
 									>
-										<Send size={18} />
-									</button>
+										<Send size={16} />
+									</Button>
 								</form>
 							</div>
-						</div>
+						</Card>
 					{/if}
 				</section>
 
 				<!-- Extracted data form -->
-				<section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-					<h2 class="mb-5 border-b border-gray-100 pb-3 text-sm font-semibold text-gray-700">
-						Dữ liệu trích xuất
-					</h2>
-					<div class="space-y-4">
+				<Card class="glass-card shadow-lg">
+					<CardHeader class="pb-4 border-b border-border/40">
+						<CardTitle class="text-[13px] font-extrabold uppercase tracking-[0.1em] text-foreground flex items-center gap-2">
+							Dữ liệu định tuyến <Sparkles size={14} class="text-primary"/>
+						</CardTitle>
+					</CardHeader>
+					<CardContent class="p-5 space-y-5">
 						{#each fields as field}
 							{@const isAutoFilled = field.value !== undefined && field.value !== null && field.value !== ''}
 							<div class="group">
-								<label
+								<Label
 									for="field-{field.key}"
-									class="mb-1.5 flex items-center justify-between gap-1.5 text-[11px] font-bold uppercase text-gray-400"
+									class="mb-2 flex items-center justify-between gap-2 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground"
 								>
-									<span class="flex items-center gap-1.5">
-										<field.icon size={12} class="transition-colors group-hover:text-blue-500" />
+									<span class="flex items-center gap-1.5 truncate">
+										<field.icon size={12} class="transition-colors group-hover:text-primary" />
 										{field.label}
 									</span>
 									{#if isAutoFilled}
-										<span class="flex items-center gap-0.5 text-[9px] lowercase text-green-500 opacity-0 transition-opacity group-hover:opacity-100">
-											<Sparkles size={8} /> AI auto-filled
+										<span class="flex items-center gap-0.5 text-[8px] font-mono text-emerald-500 opacity-0 transition-opacity group-hover:opacity-100 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+											<Sparkles size={8} /> SYNCHRONIZED
 										</span>
 									{/if}
-								</label>
+								</Label>
 								<div class="relative">
-									<input
+									<Input
 										id="field-{field.key}"
 										type="text"
 										value={editedData[field.key] ?? ((field.value as string) ?? '')}
-										placeholder="..."
+										placeholder="Empty parameter"
 										oninput={(e) => {
 											editedData = { ...editedData, [field.key]: (e.target as HTMLInputElement).value };
 										}}
-										class="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-all focus:bg-white focus:ring-2 focus:ring-blue-500
-											{isAutoFilled ? 'border-green-100 bg-gray-50' : 'border-gray-200 bg-gray-50'}"
+										class="w-full h-11 text-sm font-medium {isAutoFilled ? 'bg-primary/5 border-primary/20 focus-visible:ring-primary' : 'bg-muted/40 focus-visible:ring-primary'} transition-all"
 									/>
 									{#if isAutoFilled}
-										<div class="absolute top-1/2 right-3 -translate-y-1/2 text-green-400 opacity-30">
-											<Sparkles size={12} />
+										<div class="absolute top-1/2 right-3 -translate-y-1/2 text-primary/40">
+											<Sparkles size={14} />
 										</div>
 									{/if}
 								</div>
 							</div>
 						{/each}
-					</div>
-				</section>
+					</CardContent>
+				</Card>
 
 				<!-- SLA & Security footer -->
 				<div class="grid grid-cols-2 gap-4">
-					<div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-						<p class="mb-1 text-[10px] font-bold uppercase text-gray-400">Bảo mật</p>
-						<p class="text-xs font-semibold text-gray-800">{document.securityLevel}</p>
-					</div>
+					<Card class="glass-card shadow-md">
+						<CardContent class="p-4">
+							<p class="mb-1 text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground/80">Security Protocol</p>
+							<p class="text-sm font-extrabold tracking-wide text-foreground">{document.securityLevel}</p>
+						</CardContent>
+					</Card>
 					{#if document.slaDeadline}
-						<div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-							<p class="mb-1 text-[10px] font-bold uppercase text-gray-400">Hạn SLA</p>
-							<div class="flex items-center gap-1">
-								<Calendar size={12} class="text-red-500" />
-								<p class="text-xs font-semibold text-gray-800">
-									{new Date(document.slaDeadline).toLocaleDateString('vi-VN')}
-								</p>
-							</div>
-						</div>
+						<Card class="glass-card shadow-md relative overflow-hidden">
+							<div class="absolute inset-x-0 bottom-0 h-0.5 bg-destructive"></div>
+							<CardContent class="p-4">
+								<p class="mb-1 text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground/80">Deadline SLA</p>
+								<div class="flex items-center gap-1.5">
+									<Calendar size={14} class="text-destructive mb-px" />
+									<p class="text-sm font-extrabold tracking-wide text-foreground">
+										{new Date(document.slaDeadline).toLocaleDateString('vi-VN')}
+									</p>
+								</div>
+							</CardContent>
+						</Card>
 					{/if}
 				</div>
 			</aside>

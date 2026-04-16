@@ -2,7 +2,8 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
-	import { Upload, Search } from 'lucide-svelte';
+	import { Upload, Search, ShieldCheck } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
 
 	let { children } = $props();
 
@@ -25,43 +26,60 @@
 {:else}
 	<div class="flex min-h-screen flex-col">
 		<!-- Public Header -->
-		<header class="border-b border-gray-200 bg-white shadow-sm">
-			<div class="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
-				<a href="/" class="flex items-center gap-3">
-					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-						<span class="text-sm font-bold text-white">DVC</span>
+		<header class="sticky top-0 z-50 border-b border-border/40 bg-background/60 backdrop-blur-xl shadow-sm">
+			<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+				<a href="/" class="flex items-center gap-3 group">
+					<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 shadow-md group-hover:shadow-primary/20 transition-all">
+						<span class="text-sm font-extrabold text-white">DVC</span>
 					</div>
 					<div>
-						<p class="font-bold leading-tight text-gray-900">Cổng Dịch vụ Công</p>
-						<p class="text-xs text-gray-500">Nộp và tra cứu hồ sơ trực tuyến</p>
+						<p class="font-bold leading-tight text-foreground tracking-wide group-hover:text-primary transition-colors">Cổng Dịch vụ Công</p>
+						<p class="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-0.5">Nộp và tra cứu hồ sơ trực tuyến</p>
 					</div>
 				</a>
 
-				<nav class="flex items-center gap-2">
-					{#each navItems as item}
-						{@const isActive = page.url.pathname === item.href}
-						<a
-							href={item.href}
-							class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors
-								{isActive ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}"
-						>
-							<item.icon size={16} />
-							{item.label}
-						</a>
-					{/each}
-				</nav>
+				<div class="flex items-center gap-4">
+					<nav class="flex items-center gap-1.5 bg-muted/30 p-1 rounded-xl border border-border/30">
+						{#each navItems as item}
+							{@const isActive = page.url.pathname === item.href}
+							<a
+								href={item.href}
+								class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all
+									{isActive ? 'bg-background shadow-sm text-primary border-border/50 border' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+							>
+								<item.icon size={16} />
+								{item.label}
+							</a>
+						{/each}
+					</nav>
+
+					<div class="w-px h-8 bg-border/50 mx-2"></div>
+
+					<Button variant="outline" class="gap-2 border-primary/20 text-primary hover:bg-primary/10 transition-colors font-bold rounded-xl" href="/portal">
+						<ShieldCheck size={16} />
+						Dành cho Cán bộ
+					</Button>
+				</div>
 			</div>
 		</header>
 
 		<!-- Page content -->
-		<main class="flex-1">
+		<main class="flex-1 flex flex-col pt-8">
 			{@render children()}
 		</main>
 
 		<!-- Footer -->
-		<footer class="mt-auto border-t border-gray-200 bg-white">
-			<div class="mx-auto max-w-4xl px-4 py-4 text-center text-xs text-gray-400">
-				Hệ thống DVC — Hỗ trợ: 1900-xxxx | Email: hotro@dvc.gov.vn
+		<footer class="mt-auto border-t border-border/40 bg-background/40 backdrop-blur-md">
+			<div class="mx-auto max-w-5xl px-4 py-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-widest">
+				<div class="flex items-center gap-2">
+					<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
+					Hệ thống DVC trực tuyến hoạt động bình thường
+				</div>
+				<div class="flex items-center gap-4">
+					<span>Hỗ trợ: 1900-xxxx</span>
+					<span>•</span>
+					<span>Email: hotro@dvc.gov.vn</span>
+				</div>
 			</div>
 		</footer>
 	</div>

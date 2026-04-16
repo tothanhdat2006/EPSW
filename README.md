@@ -1,163 +1,173 @@
-# DVC Workflow System
+# DVC AI Enterprise
 
-A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dich vu Cong).
+Hệ thống quản trị và xử lý thủ tục hành chính công (Dịch vụ Công - DVC), được tăng cường sức mạnh bởi AI (Qwen) với khả năng tự động bóc tách OCR+LLM và định tuyến quy trình nghiệp vụ.
 
-The repository now includes a Docker-free Cloudflare runtime path:
+## Tech Stack
 
-- Core API on Cloudflare Workers
-- SQL on Cloudflare D1
-- Object storage on Cloudflare R2
-- Queue processing on Cloudflare Queues + Cron
-- Redis metrics/event log on Upstash Redis
+| Layer | Technology |
+|---|---|
+| Frontend | SvelteKit (Svelte 5), Shadcn-Svelte, Tailwind CSS V4 |
+| API / Runtime | Cloudflare Workers (via `@sveltejs/adapter-cloudflare`) |
+| Database | Cloudflare D1 (SQLite) + Drizzle ORM |
+| File Storage | Cloudflare R2 |
+| Caching | Upstash Redis |
+| AI Engine | Alibaba DashScope — Qwen models (OCR + LLM) |
+| Auth | Better Auth (email/password, session via D1) |
+| Fonts | Space Grotesk, Outfit, JetBrains Mono |
 
-## Architecture
+## Local Development Setup
 
-```
-Citizen / Staff
-      │
-      ▼
-apps/web-portal / apps/public-dvc-web
-      │
-      ▼
-core-api (Node.js/TypeScript, Express)
-      ├─ Documents API (submit, track, review, approve)
-      ├─ HITL API (claim/resolve task)
-      ├─ AI API (chat, re-analyze)
-      ├─ Alibaba OCR + LLM adapters
-      ├─ BullMQ workflows (document processing + SLA checks)
-      ├─ Notification dispatch (email/SMS/Zalo)
-      ├─ PostgreSQL (Prisma)
-      └─ MinIO (raw/redacted/published files)
-```
-
-## Quick Start (Cloudflare Workers, No Docker)
-
-Use the setup guide:
-
-- `docs/CLOUDFLARE_WORKERS_SETUP.md`
-- `docs/AUTH_UPDATE_2026-04-16.md`
-
-Common commands:
+### 1. Install dependencies
 
 ```bash
+cd app
 pnpm install
-pnpm dev:workers
-pnpm deploy:workers
 ```
 
-## Quick Start (Legacy Local Docker)
+### 2. Configure environment variables
 
-### 1. Start Infrastructure
-```bash
-cd infra
-docker compose up -d
+Create `app/.env` with the following:
+
+```env
+# Cloudflare (required only for remote DB push / production deploy)
+CLOUDFLARE_ACCOUNT_ID=""
+CLOUDFLARE_DATABASE_ID=""
+CLOUDFLARE_D1_TOKEN=""
+
+# Upstash Redis
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+
+# Cloudflare R2 (S3-compatible)
+R2_ACCESS_KEY_ID=""
+R2_SECRET_ACCESS_KEY=""
+R2_TOKEN_VALUE=""
+
+# AI: Alibaba DashScope / Qwen (OpenAI-compatible)
+LLM_PROVIDER="dashscope"
+LLM_API_KEY="sk-xxxxxxxxxxxxxxxx"
+LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# Better Auth
+BETTER_AUTH_SECRET="your-random-secret-here"
+ORIGIN="http://localhost:5173"
 ```
 
-If host ports conflict on your machine, override them inline, for example:
+### 3. Generate auth schema (one-time)
 
-```bash
-POSTGRES_PORT=5434 docker compose up -d
-```
-
-### 2. Initialize Keycloak Schema (Required once)
-```bash
-docker exec dvc-postgres psql -U dvc_user -d dvc_db -c "CREATE SCHEMA IF NOT EXISTS keycloak;"
-```
-
-### 3. Setup Database
-```bash
-# First time setup or if migrations diverge:
-pnpm --filter @dvc/database exec prisma migrate reset --force
-
-# Normal migration:
-pnpm --filter @dvc/database db:migrate:dev
-```
-
-### 4. Configure Environment
-Ensure you have a `.env` file in the root. Required keys now include `DATABASE_URL`, `REDIS_URL`, `LLM_API_KEY`, and MinIO credentials.
-
-### 5. Running the System
-Run this in one terminal:
-- **Unified Stack**: `pnpm dev`
-
-## Integrate External JSON Data into Web Portal (qwen-rag)
-
-To load external datasets from:
-
-- `/home/phuc/Project/qwen-rag/data.json`
-- `/home/phuc/Project/qwen-rag/data_detail.json`
-
-run the sync pipeline from the monorepo root:
+Better Auth needs to generate the user/session/account table definitions:
 
 ```bash
-pnpm sync:qwen-data
+cd app
+pnpm auth:schema
 ```
 
-This copies and validates JSON into:
+This writes `src/lib/server/db/auth.schema.ts`. The file is already exported from `schema.ts`.
 
-- `apps/web-portal/public/mock/qwen-data.json`
-- `apps/web-portal/public/mock/qwen-data-detail.json`
-
-Then start web portal in local JSON mode:
+### 4. Start the dev server
 
 ```bash
-pnpm --filter @dvc/web-portal dev:mock
+cd app
+pnpm dev
 ```
 
-Or run sync + dev in one command:
+On every start, the dev script automatically runs:
+```
+wrangler d1 execute epsw-db --local --file=scripts/schema-local.sql
+```
+This creates all D1 tables (idempotent — safe to run repeatedly) in Wrangler's **local** Miniflare D1 simulation before Vite boots.
+
+> **Note**: Local dev uses a local SQLite file at `.wrangler/state/v3/d1/`. This is separate from your remote Cloudflare D1 database. No Cloudflare credentials are needed for local development.
+
+### 5. Create the admin account (one-time)
+
+After the dev server is running, seed the default admin account:
 
 ```bash
-pnpm dev:web-portal:mock
+curl -X POST http://localhost:5173/api/auth/sign-up/email \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@dvc.gov.vn","password":"Admin@DVC2025!","name":"Quản trị viên DVC"}'
 ```
 
-In mock mode, web-portal reads local files first and falls back to API only when needed.
+Expected response: `HTTP 200` with a user object.
 
-## Services
+**Default credentials:**
+| | |
+|---|---|
+| Email | `admin@dvc.gov.vn` |
+| Password | `Admin@DVC2025!` |
 
-| Service | Port | Tech |
-|---|---|---|
-| core-api | 3001 | Node.js/TypeScript (Express + BullMQ) |
-| web-portal | 3000 | React/Vite |
-| public-dvc-web | 3005 | React/Vite |
+> ⚠️ Change this password after first login.
 
-## Infrastructure
+### 6. Access the application
 
-| Component | UI | Port |
-|---|---|---|
-| Redis | — | 6379 |
-| PostgreSQL | — | 5433 |
-| MinIO | Console | 9001 |
-| Keycloak | Admin | 8180 |
+| Route | Description |
+|---|---|
+| `http://localhost:5173/` | Citizen portal — submit documents |
+| `http://localhost:5173/track` | Track document status by code |
+| `http://localhost:5173/portal/login` | Staff login |
+| `http://localhost:5173/portal` | Admin dashboard (requires login) |
 
-## Environment Variables
+---
 
-Copy `infra/.env.example` to `.env` and fill in your values before running any service.
-
-## HITL Rules
-
-- AI Confidence Score **< 70** -> automatically paused and a HITL task is created.
-- The system never auto-approves tasks that fail strict validation.
-- SLA breach creates a manager escalation HITL task.
-
-## Deployment (Kubernetes)
+## Commands Reference
 
 ```bash
-kubectl apply -f infra/kubernetes/namespace.yaml
-kubectl apply -f infra/kubernetes/secrets/secrets.yaml  # fill in real values first
+# Development
+pnpm dev              # Push local schema + start Vite dev server
+pnpm check            # Svelte type-check + wrangler types sync
+
+# Database
+pnpm db:push          # Push schema to REMOTE Cloudflare D1 (requires env vars)
+pnpm auth:schema      # Regenerate Better Auth table definitions
+
+# Admin
+pnpm seed:admin       # Create admin account (run while dev server is up)
+
+# Production
+pnpm build            # Build for Cloudflare Workers
+pnpm preview          # Preview production build locally
 ```
 
-Legacy per-service Helm charts were removed as part of the unified runtime refactor. For Kubernetes deployment, create a dedicated `core-api` chart (or extend `infra/kubernetes/api-gateway` if you still use it as ingress).
+---
 
-## Troubleshooting
+## Production Deployment
 
-### 1. `ECONNREFUSED` on port 3001 (`/api/documents`)
-- **Reason**: The `core-api` service is not running.
-- **Fix**: Run `pnpm dev` in the root, or specifically start the service: `pnpm --filter @dvc/core-api dev`.
+```bash
+cd app
 
-### 2. Prisma Migration Errors (Diverged data)
-- **Reason**: The local database schema does not match the migration history.
-- **Fix**: Run `pnpm --filter @dvc/database exec prisma migrate reset --force`. Note that this will clear all data.
+# 1. Push schema to remote D1 (requires CLOUDFLARE_D1_TOKEN in .env)
+pnpm db:push
 
-### 3. Port Conflicts
-- **Reason**: Another process is using mapped host ports (for example `5433`, `3001`, `3000`, `3005`).
-- **Fix**: Stop the conflicting process or override compose ports (for example `POSTGRES_PORT=5434 docker compose up -d`).
+# 2. Build and deploy to Cloudflare Pages/Workers
+pnpm build
+npx wrangler deploy
+```
+
+---
+
+## AI + HITL Flow
+
+Documents submitted by citizens are processed automatically:
+
+1. File uploaded → stored in **Cloudflare R2**
+2. **Qwen OCR** extracts text and structured fields
+3. If AI confidence < 70%, SLA is breached, or validation fails → document is **paused** and a task is created in the **HITL Queue**
+4. Staff claim and resolve tasks from `/portal/hitl`
+5. Once validated → routed to leadership approval at `/portal/approval`
+
+---
+
+## Architecture Diagram
+
+```
+Citizen / Staff Browser
+        │
+        ▼
+   SvelteKit (Cloudflare Workers)
+        │
+        ├─ Cloudflare D1 (SQL via Drizzle ORM)
+        ├─ Cloudflare R2 (file storage)
+        ├─ Upstash Redis (caching / rate limiting)
+        └─ DashScope API (Qwen OCR + LLM)
+```

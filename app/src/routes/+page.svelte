@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { Upload, FileText, CheckCircle, AlertCircle, Copy } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '$lib/components/ui/card';
+	import { Label } from '$lib/components/ui/label';
 
 	// ─── Types ────────────────────────────────────────────────────────────────
 
@@ -80,157 +83,184 @@
 </script>
 
 <svelte:head>
-	<title>Nộp hồ sơ — Cổng Dịch vụ Công</title>
+	<title>Nộp hồ sơ — Dịch vụ Công</title>
 	<meta name="description" content="Nộp hồ sơ trực tuyến. Tải lên tài liệu PDF hoặc hình ảnh scan." />
 </svelte:head>
 
-{#if isSuccess && result}
-	<!-- ── Success state ── -->
-	<div class="mx-auto max-w-xl px-4 py-16 text-center">
-		<div class="rounded-2xl border border-green-100 bg-white p-10 shadow-lg">
-			<CheckCircle size={56} class="mx-auto mb-5 text-green-500" />
-			<h2 class="mb-2 text-2xl font-bold text-gray-900">Nộp hồ sơ thành công!</h2>
-			<p class="mb-6 text-gray-500">
-				Hệ thống đang xử lý hồ sơ của bạn. Lưu mã theo dõi bên dưới để tra cứu trạng thái.
-			</p>
-			<div
-				class="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4"
-			>
-				<div class="text-left">
-					<p class="mb-1 text-xs text-gray-500">Mã theo dõi</p>
-					<p class="font-mono text-lg font-bold text-blue-700">{result.trackingCode}</p>
-				</div>
-				<button
-					onclick={copyTracking}
-					class="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-blue-600"
-				>
-					<Copy size={16} />
-					{copied ? 'Đã sao chép!' : 'Sao chép'}
-				</button>
-			</div>
-			<button
-				onclick={resetForm}
-				class="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
-			>
-				Nộp hồ sơ khác
-			</button>
-		</div>
-	</div>
-{:else}
-	<!-- ── Form ── -->
-	<div class="mx-auto max-w-2xl px-4 py-12">
-		<div class="mb-8 text-center">
-			<h1 class="text-3xl font-bold text-gray-900">Nộp hồ sơ trực tuyến</h1>
-			<p class="mt-2 text-gray-500">
-				Tải lên tài liệu PDF hoặc hình ảnh scan. Hệ thống AI sẽ tự động xử lý.
-			</p>
-		</div>
-
-		<form
-			onsubmit={handleSubmit}
-			class="space-y-6 rounded-2xl border border-gray-200 bg-white p-8 shadow-lg"
-		>
-			<!-- File drop zone -->
-			<div>
-				<label for="file-input" class="mb-3 block text-sm font-semibold text-gray-700">
-					Tài liệu hồ sơ <span class="text-red-500">*</span>
-				</label>
-				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<div class="mx-auto flex max-w-2xl flex-col justify-center px-4 py-16">
+	{#if isSuccess && result}
+		<!-- ── Success state ── -->
+		<Card class="glass-card text-center animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden relative">
+			<div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+			<CardHeader class="pt-10">
+				<CheckCircle size={56} class="mx-auto mb-4 text-emerald-500" />
+				<CardTitle class="text-2xl font-bold tracking-tight">Nộp hồ sơ thành công</CardTitle>
+				<CardDescription class="text-base mt-2">
+					Hệ thống AI đang xử lý hồ sơ của bạn. <br/> Lưu mã theo dõi bên dưới để tra cứu trạng thái.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
 				<div
-					role="button"
-					tabindex="0"
-					ondrop={handleDrop}
-					ondragover={(e) => {
-						e.preventDefault();
-						dragOver = true;
-					}}
-					ondragleave={() => (dragOver = false)}
-					onclick={() => fileInputEl?.click()}
-					onkeydown={(e) => e.key === 'Enter' && fileInputEl?.click()}
-					class="cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-all
-						{dragOver
-						? 'border-blue-500 bg-blue-50'
-						: file
-							? 'border-green-400 bg-green-50'
-							: 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}"
+					class="mb-6 flex items-center justify-between rounded-xl border border-border/50 bg-muted/40 p-5 backdrop-blur-sm"
 				>
-					{#if file}
-						<div class="flex items-center justify-center gap-3">
-							<FileText size={28} class="text-green-500" />
-							<div class="text-left">
-								<p class="font-semibold text-gray-900">{file.name}</p>
-								<p class="text-sm text-gray-500">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
-							</div>
-						</div>
-					{:else}
-						<Upload size={36} class="mx-auto mb-3 text-gray-400" />
-						<p class="font-medium text-gray-700">Kéo thả hoặc nhấp để chọn tệp</p>
-						<p class="mt-1 text-sm text-gray-400">PDF, JPEG, PNG, TIFF — tối đa {MAX_SIZE_MB}MB</p>
-					{/if}
-					<input
-						id="file-input"
-						bind:this={fileInputEl}
-						type="file"
-						accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif"
-						class="hidden"
-						onchange={(e) => (file = (e.target as HTMLInputElement).files?.[0] ?? null)}
-					/>
+					<div class="text-left space-y-1">
+						<p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mã theo dõi</p>
+						<p class="font-mono text-xl font-bold text-primary">{result.trackingCode}</p>
+					</div>
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={copyTracking}
+						class="gap-2 transition-all hover:bg-primary/10"
+					>
+						<Copy size={16} />
+						{copied ? 'Đã sao chép' : 'Sao chép'}
+					</Button>
 				</div>
-			</div>
+			</CardContent>
+			<CardFooter>
+				<Button
+					onclick={resetForm}
+					class="w-full h-12 text-md shadow-lg shadow-primary/20"
+				>
+					Nộp hồ sơ khác
+				</Button>
+			</CardFooter>
+		</Card>
+	{:else}
+		<!-- ── Form ── -->
+		<div class="mb-10 text-center animate-in fade-in duration-700">
+			<h1 class="bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
+				Cổng Nộp Hồ Sơ AI
+			</h1>
+			<p class="mt-4 text-lg text-muted-foreground">
+				Hệ thống tự động trích xuất thông tin qua <strong class="text-primary font-semibold">Tầm nhìn AI</strong>
+			</p>
+		</div>
 
-			<!-- Priority selection -->
-			<div>
-				<p class="mb-3 text-sm font-semibold text-gray-700">Mức độ ưu tiên</p>
-				<div class="grid grid-cols-3 gap-3">
-					{#each PRIORITY_OPTIONS as opt}
-						<label
-							class="flex cursor-pointer flex-col items-center rounded-xl border-2 p-4 text-center transition-all
-								{priority === opt.value
-								? 'border-blue-500 bg-blue-50'
-								: 'border-gray-200 hover:border-gray-300'}"
+		<Card class="glass-card animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden relative">
+			<div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/50 to-purple-500/50"></div>
+			<form onsubmit={handleSubmit}>
+				<CardHeader>
+				</CardHeader>
+				
+				<CardContent class="space-y-8">
+					<!-- File drop zone -->
+					<div class="space-y-4">
+						<Label for="file-input" class="text-base font-semibold">
+							Tài liệu hồ sơ <span class="text-destructive">*</span>
+						</Label>
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div
+							role="button"
+							tabindex="0"
+							ondrop={handleDrop}
+							ondragover={(e) => {
+								e.preventDefault();
+								dragOver = true;
+							}}
+							ondragleave={() => (dragOver = false)}
+							onclick={() => fileInputEl?.click()}
+							onkeydown={(e) => e.key === 'Enter' && fileInputEl?.click()}
+							class="group relative flex flex-col items-center justify-center cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-300 ease-out
+								{dragOver
+								? 'border-primary bg-primary/10'
+								: file
+									? 'border-emerald-500/50 bg-emerald-500/10'
+									: 'border-border hover:border-primary/50 hover:bg-muted/50'}"
 						>
+							{#if file}
+								<div class="flex items-center justify-center gap-4">
+									<div class="p-3 bg-emerald-500/20 rounded-xl">
+										<FileText size={32} class="text-emerald-500" />
+									</div>
+									<div class="text-left space-y-1">
+										<p class="font-semibold text-foreground truncate max-w-[200px] sm:max-w-xs">{file.name}</p>
+										<p class="text-sm font-medium text-emerald-500">Đã chọn thành công • {(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+									</div>
+								</div>
+							{:else}
+								<div class="p-4 bg-muted rounded-full mb-4 group-hover:scale-110 group-hover:bg-primary/20 transition-all">
+									<Upload size={32} class="text-muted-foreground group-hover:text-primary transition-colors" />
+								</div>
+								<p class="font-semibold text-foreground text-lg">Kéo và thả tệp vào đây</p>
+								<p class="mt-2 text-sm font-medium text-muted-foreground">hoặc bấm để duyệt từ máy tính</p>
+								<p class="mt-4 text-xs font-medium text-muted-foreground/60 tracking-wider">HỖ TRỢ: PDF, JPG, PNG, TIFF (MAX {MAX_SIZE_MB}MB)</p>
+							{/if}
 							<input
-								type="radio"
-								name="priority"
-								value={opt.value}
-								bind:group={priority}
-								class="sr-only"
+								id="file-input"
+								bind:this={fileInputEl}
+								type="file"
+								accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif"
+								class="hidden"
+								onchange={(e) => (file = (e.target as HTMLInputElement).files?.[0] ?? null)}
 							/>
-							<span
-								class="text-sm font-bold {priority === opt.value
-									? 'text-blue-700'
-									: 'text-gray-700'}">{opt.label}</span
-							>
-							<span class="mt-1 text-xs text-gray-400">{opt.description}</span>
-						</label>
-					{/each}
-				</div>
-			</div>
+						</div>
+					</div>
 
-			<!-- Error -->
-			{#if isError}
-				<div class="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
-					<AlertCircle size={20} class="shrink-0 text-red-500" />
-					<p class="text-sm text-red-700">Có lỗi xảy ra khi nộp hồ sơ. Vui lòng thử lại.</p>
-				</div>
-			{/if}
+					<!-- Priority selection -->
+					<div class="space-y-4">
+						<Label class="text-base font-semibold">Độ ưu tiên xử lý</Label>
+						<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+							{#each PRIORITY_OPTIONS as opt}
+								<label
+									class="relative flex cursor-pointer flex-col items-center rounded-xl border-2 p-4 text-center transition-all duration-200
+										{priority === opt.value
+										? 'border-primary bg-primary/5 shadow-sm shadow-primary/10'
+										: 'border-border/60 hover:border-border hover:bg-muted/30'}"
+								>
+									<input
+										type="radio"
+										name="priority"
+										value={opt.value}
+										bind:group={priority}
+										class="sr-only"
+									/>
+									<span
+										class="text-sm font-bold tracking-wide {priority === opt.value
+											? 'text-primary'
+											: 'text-foreground'}"
+									>
+										{opt.label}
+									</span>
+									<span class="mt-1.5 text-xs font-medium text-muted-foreground">{opt.description}</span>
+									
+									{#if priority === opt.value}
+										<div class="absolute top-3 right-3 w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+									{/if}
+								</label>
+							{/each}
+						</div>
+					</div>
 
-			<!-- Submit -->
-			<button
-				type="submit"
-				disabled={!file || isPending}
-				class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm
-					font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-			>
-				{#if isPending}
-					<span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-					></span>
-					Đang nộp...
-				{:else}
-					<Upload size={16} />
-					Nộp hồ sơ
-				{/if}
-			</button>
-		</form>
-	</div>
-{/if}
+					<!-- Error -->
+					{#if isError}
+						<div class="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 animate-in slide-in-from-top-2">
+							<AlertCircle size={20} class="shrink-0 text-destructive" />
+							<p class="text-sm font-medium text-destructive">Máy chủ bận hoặc tệp không hợp lệ. Vui lòng thử lại.</p>
+						</div>
+					{/if}
+				</CardContent>
+
+				<CardFooter class="pt-2 pb-8">
+					<Button
+						type="submit"
+						size="lg"
+						disabled={!file || isPending}
+						class="w-full relative overflow-hidden group shadow-lg shadow-primary/20 h-14 text-base"
+					>
+						{#if isPending}
+							<span class="absolute inset-0 bg-primary-foreground/20 animate-pulse"></span>
+							<span class="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent mr-2"></span>
+							Đang phân tích AI...
+						{:else}
+							<Upload size={18} class="mr-2 group-hover:-translate-y-1 transition-transform" />
+							Thực hiện nộp hồ sơ
+						{/if}
+					</Button>
+				</CardFooter>
+			</form>
+		</Card>
+	{/if}
+</div>
+
