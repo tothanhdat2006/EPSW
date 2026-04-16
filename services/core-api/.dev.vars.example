@@ -1,0 +1,20 @@
+# Copy to .dev.vars for local wrangler dev
+# This file is for Cloudflare Worker local dev and remote deploy secrets.
+
+NODE_ENV=development
+
+# Better Auth (required for email/password credentials)
+BETTER_AUTH_SECRET=change-this-to-a-random-32-char-secret
+BETTER_AUTH_URL=http://localhost:8787
+BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000,http://localhost:3005
+
+# Upstash Redis REST (optional but recommended)
+UPSTASH_REDIS_REST_URL=https://<your-upstash-id>.upstash.io
+UPSTASH_REDIS_REST_TOKEN=<your-upstash-token>
+
+# Optional public URL prefixes for bucket object access
+R2_PUBLIC_BASE_URL=
+R2_PUBLISHED_PUBLIC_BASE_URL=
+
+MAX_FILE_SIZE_MB=50
+CONFIDENCE_THRESHOLD=70

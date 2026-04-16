@@ -1,6 +1,14 @@
 # DVC Workflow System
 
-A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dich vu Cong). The runtime architecture has been simplified to a unified Node Core API with BullMQ.
+A high-throughput, AI-augmented document processing platform for Vietnamese public services (Dich vu Cong).
+
+The repository now includes a Docker-free Cloudflare runtime path:
+
+- Core API on Cloudflare Workers
+- SQL on Cloudflare D1
+- Object storage on Cloudflare R2
+- Queue processing on Cloudflare Queues + Cron
+- Redis metrics/event log on Upstash Redis
 
 ## Architecture
 
@@ -22,7 +30,22 @@ core-api (Node.js/TypeScript, Express)
       └─ MinIO (raw/redacted/published files)
 ```
 
-## Quick Start (Local)
+## Quick Start (Cloudflare Workers, No Docker)
+
+Use the setup guide:
+
+- `docs/CLOUDFLARE_WORKERS_SETUP.md`
+- `docs/AUTH_UPDATE_2026-04-16.md`
+
+Common commands:
+
+```bash
+pnpm install
+pnpm dev:workers
+pnpm deploy:workers
+```
+
+## Quick Start (Legacy Local Docker)
 
 ### 1. Start Infrastructure
 ```bash

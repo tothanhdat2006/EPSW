@@ -7,12 +7,18 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
+    "type-check:workers": "tsc -p tsconfig.workers.json --noEmit",
+    "dev:workers": "wrangler dev --config wrangler.epsw.toml",
+    "deploy:workers": "wrangler deploy --config wrangler.epsw.toml",
+    "d1:schema:local": "wrangler d1 execute ${D1_DATABASE_NAME:-epsw-core-db} --config wrangler.epsw.toml --file ./d1/schema.sql --local",
+    "d1:schema:remote": "wrangler d1 execute ${D1_DATABASE_NAME:-epsw-core-db} --config wrangler.epsw.toml --file ./d1/schema.sql --remote",
     "clean": "rimraf dist"
   },
   "dependencies": {
     "@dvc/database": "workspace:*",
     "@dvc/logger": "workspace:*",
     "@dvc/shared-types": "workspace:*",
+    "better-auth": "^1.4.3",
     "bullmq": "^5.16.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
@@ -28,6 +34,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260402.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/multer": "^1.4.12",
@@ -36,6 +43,7 @@
     "@types/uuid": "^10.0.0",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "wrangler": "^4.14.4"
   }
 }

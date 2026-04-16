@@ -5,9 +5,14 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:workers": "pnpm --filter @dvc/core-api dev:workers",
     "dev:web-portal:mock": "pnpm sync:qwen-data && pnpm --filter @dvc/web-portal dev:mock",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
+    "type-check:workers": "pnpm --filter @dvc/core-api type-check:workers",
+    "deploy:workers": "pnpm --filter @dvc/core-api deploy:workers",
+    "d1:schema:local": "pnpm --filter @dvc/core-api d1:schema:local",
+    "d1:schema:remote": "pnpm --filter @dvc/core-api d1:schema:remote",
     "clean": "turbo run clean",
     "sync:qwen-data": "node scripts/sync-qwen-data.mjs"
   },
