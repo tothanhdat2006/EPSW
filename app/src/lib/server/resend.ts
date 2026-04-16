@@ -37,7 +37,7 @@ export async function sendEmail({
 	to,
 	subject,
 	html,
-	from = 'dvc-no-reply@mncuchiinhuttt.dev'
+	from = 'DVC No Reply <dvc-no-reply@mncuchiinhuttt.dev>'
 }: SendEmailOptions) {
 	try {
 		const resend = await getResendClient();
