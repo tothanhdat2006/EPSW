@@ -4,7 +4,7 @@
 	import { 
 		Upload, FileText, CheckCircle, AlertCircle, Copy, 
 		ArrowRight, ArrowLeft, Mail, Settings2, ShieldCheck,
-		FileUp
+		FileUp, CreditCard, X
 	} from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '$lib/components/ui/card';
@@ -13,6 +13,7 @@
 	// ─── Types ────────────────────────────────────────────────────────────────
 
 	type Priority = 'NORMAL' | 'URGENT' | 'FLASH';
+	type DocumentType = 'CA_NHAN' | 'HO_KINH_DOANH' | 'DOANH_NGHIEP';
 
 	interface SubmitResult {
 		documentId: string;
@@ -21,10 +22,10 @@
 		message: string;
 	}
 
-	const PRIORITY_OPTIONS: { value: Priority; label: string; description: string }[] = [
-		{ value: 'NORMAL', label: 'Thường', description: 'Xử lý trong 48 giờ' },
-		{ value: 'URGENT', label: 'Khẩn', description: 'Xử lý trong 2 giờ' },
-		{ value: 'FLASH', label: 'Hỏa tốc', description: 'Xử lý ngay lập tức' }
+	const DOC_TYPE_OPTIONS: { value: DocumentType; label: string; description: string; icon: string }[] = [
+		{ value: 'CA_NHAN', label: 'Cá nhân', description: 'Hồ sơ thuộc cá nhân, hộ gia đình', icon: '👤' },
+		{ value: 'HO_KINH_DOANH', label: 'Hộ kinh doanh', description: 'Hộ sơ kinh doanh cá thể, hộ gia đình', icon: '🏪' },
+		{ value: 'DOANH_NGHIEP', label: 'Doanh nghiệp', description: 'Công ty, tổ chức, pháp nhân', icon: '🏢' }
 	];
 
 	const MAX_SIZE_MB = 50;
@@ -32,8 +33,8 @@
 	// ─── State ────────────────────────────────────────────────────────────────
 
 	let currentStep = $state(1);
-	let file = $state<File | null>(null);
-	let priority = $state<Priority>('NORMAL');
+	let files = $state<File[]>([]);
+	let documentType = $state<DocumentType>('CA_NHAN');
 	let dragOver = $state(false);
 	let copied = $state(false);
 	let isPending = $state(false);
@@ -41,12 +42,14 @@
 	let isError = $state(false);
 	let result = $state<SubmitResult | null>(null);
 	let citizenEmail = $state('');
+	let citizenCccd = $state('');
 	let fileInputEl = $state<HTMLInputElement | null>(null);
 
 	// ─── Navigation ─────────────────────────────────────────────────────────────
 
 	function nextStep() {
-		if (currentStep === 1 && !file) return;
+		if (currentStep === 1 && files.length === 0) return;
+		if (currentStep === 2 && citizenCccd.trim().length < 9) return;
 		if (currentStep < 3) currentStep++;
 	}
 
@@ -54,24 +57,56 @@
 		if (currentStep > 1) currentStep--;
 	}
 
+	function appendFiles(newFiles: File[]) {
+		const existingNames = new Set(files.map(f => f.name));
+		const toAdd = newFiles.filter(f => !existingNames.has(f.name));
+		const newArray = [...files, ...toAdd];
+		if (newArray.length > 10) {
+			alert('Tối đa 10 tệp được cho phép. Hệ thống đã tự động giới hạn danh sách.');
+			files = newArray.slice(0, 10);
+		} else {
+			files = newArray;
+		}
+	}
+
+	function removeFile(name: string, e: Event) {
+		e.stopPropagation();
+		files = files.filter(f => f.name !== name);
+	}
+
 	function handleDrop(e: DragEvent) {
 		e.preventDefault();
 		dragOver = false;
-		const droppedFile = e.dataTransfer?.files[0];
-		if (droppedFile) file = droppedFile;
+		if (e.dataTransfer?.files) {
+			appendFiles(Array.from(e.dataTransfer.files));
+		}
+	}
+
+	function handleFileSelect(e: Event) {
+		const input = e.target as HTMLInputElement;
+		if (input.files) {
+			appendFiles(Array.from(input.files));
+		}
+		// Reset input so selecting the same file again triggers change event
+		input.value = '';
 	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!file) return;
+		if (files.length === 0) return;
 		isPending = true;
 		isError = false;
 		try {
 			const formData = new FormData();
-			formData.append('file', file);
-			formData.append('priority', priority);
+			for (const f of files) {
+				formData.append('file', f);
+			}
+			formData.append('documentType', documentType);
 			if (citizenEmail) {
 				formData.append('citizenEmail', citizenEmail);
+			}
+			if (citizenCccd) {
+				formData.append('citizenCccd', citizenCccd.trim());
 			}
 			const res = await fetch('/api/documents', { method: 'POST', body: formData });
 			if (!res.ok) throw new Error('Submit failed');
@@ -96,10 +131,11 @@
 		isSuccess = false;
 		isError = false;
 		result = null;
-		file = null;
-		priority = 'NORMAL';
+		files = [];
+		documentType = 'CA_NHAN';
 		currentStep = 1;
 		citizenEmail = '';
+		citizenCccd = '';
 	}
 </script>
 
@@ -168,7 +204,7 @@
 				<div class="h-[1px] w-12 bg-gradient-to-l from-transparent to-primary/50"></div>
 			</div>
 			<h1 class="bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl">
-				Nộp Hồ Sơ AI
+				Nộp Hồ Sơ Trực Tuyến
 			</h1>
 		</div>
 
@@ -194,7 +230,7 @@
 								? 'border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-110' 
 								: 'border-muted-foreground/20 bg-background text-muted-foreground'}"
 					>
-						<item.icon size={20} weight={currentStep >= item.step ? 'bold' : 'regular'} />
+						<item.icon size={20} />
 					</div>
 					<span class="text-[10px] font-black uppercase tracking-widest {currentStep >= item.step ? 'text-primary' : 'text-muted-foreground/50'}">
 						{item.label}
@@ -226,18 +262,40 @@
 								onclick={() => fileInputEl?.click()}
 								onkeydown={(e) => e.key === 'Enter' && fileInputEl?.click()}
 								class="group relative flex flex-col items-center justify-center cursor-pointer rounded-3xl border-2 border-dashed p-12 text-center transition-all duration-300
-									{dragOver ? 'border-primary bg-primary/10 scale-[0.99]' : file ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-muted-foreground/20 hover:border-primary/50 hover:bg-primary/5'}"
+									{dragOver ? 'border-primary bg-primary/10 scale-[0.99]' : files.length > 0 ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-muted-foreground/20 hover:border-primary/50 hover:bg-primary/5'}"
 							>
-								{#if file}
+								{#if files.length > 0}
 									<div class="flex flex-col items-center animate-in zoom-in-95 duration-300">
-										<div class="mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-500/20 text-emerald-500 ring-4 ring-emerald-500/10">
-											<FileText size={40} />
+										<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-500/20 text-emerald-500 ring-4 ring-emerald-500/10">
+											<FileText size={32} />
 										</div>
-										<p class="font-bold text-lg truncate max-w-xs">{file.name}</p>
-										<p class="mt-1 text-xs font-black uppercase tracking-wider text-emerald-600/70">{(file.size / (1024 * 1024)).toFixed(2)} MB • Sẵn sàng</p>
-										<Button variant="ghost" size="sm" class="mt-6 h-8 text-xs font-bold hover:text-destructive transition-colors" onclick={(e) => { e.stopPropagation(); file = null; }}>
-											Thay đổi tệp tin
-										</Button>
+										<p class="font-bold text-lg truncate max-w-xs">{files.length}/10 tệp được chọn</p>
+										<p class="mt-1 text-xs font-black uppercase tracking-wider text-emerald-600/70">{(files.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB Tổng dung lượng</p>
+										
+										<div class="mt-4 flex flex-col gap-2 w-full max-w-sm max-h-[140px] overflow-y-auto px-1 pr-2 scrollbar-thin">
+											{#each files as file}
+												<div class="flex items-center justify-between gap-3 bg-muted/40 p-2.5 rounded-xl border border-border/50 hover:bg-muted/60 transition-colors">
+													<div class="flex items-center gap-2 overflow-hidden">
+														<FileText size={14} class="text-emerald-500 shrink-0" />
+														<span class="text-xs font-bold truncate">{file.name}</span>
+													</div>
+													<button type="button" class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-1.5 rounded-lg shrink-0 transition-colors" onclick={(e) => removeFile(file.name, e)}>
+														<X size={14} />
+													</button>
+												</div>
+											{/each}
+										</div>
+
+										<div class="mt-6 flex gap-3">
+											{#if files.length < 10}
+												<Button variant="outline" size="sm" class="h-8 text-xs font-bold" onclick={(e) => { e.stopPropagation(); fileInputEl?.click(); }}>
+													Thêm tệp
+												</Button>
+											{/if}
+											<Button variant="ghost" size="sm" class="h-8 text-xs font-bold hover:text-destructive transition-colors border border-destructive/20 hover:border-destructive" onclick={(e) => { e.stopPropagation(); files = []; }}>
+												Xóa tất cả
+											</Button>
+										</div>
 									</div>
 								{:else}
 									<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300 group-hover:scale-110">
@@ -251,7 +309,7 @@
 										{/each}
 									</div>
 								{/if}
-								<input bind:this={fileInputEl} type="file" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif" class="hidden" onchange={(e) => (file = (e.target as HTMLInputElement).files?.[0] ?? null)} />
+								<input bind:this={fileInputEl} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif" class="hidden" onchange={handleFileSelect} />
 							</div>
 						</div>
 					{:else if currentStep === 2}
@@ -263,53 +321,78 @@
 							</div>
 
 							<div class="space-y-4 max-w-sm mx-auto pt-6">
-								<Label for="citizen-email" class="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Địa chỉ Email (Tùy chọn)</Label>
-								<div class="relative group">
-									<Mail size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
-									<input
-										id="citizen-email"
-										type="email"
-										placeholder="username@example.com"
-										bind:value={citizenEmail}
-										class="w-full rounded-2xl border border-muted-foreground/20 bg-muted/20 pl-11 pr-4 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
-									/>
+								<!-- CCCD field (required) -->
+								<div class="space-y-2">
+									<Label for="citizen-cccd" class="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
+										Số CCCD / CMND <span class="text-destructive">*</span>
+									</Label>
+									<div class="relative group">
+										<CreditCard size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+										<input
+											id="citizen-cccd"
+											type="text"
+											maxlength="12"
+											placeholder="012345678901"
+											bind:value={citizenCccd}
+											class="w-full rounded-2xl border border-muted-foreground/20 bg-muted/20 pl-11 pr-4 py-4 text-sm font-mono font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all
+												{citizenCccd.length > 0 && citizenCccd.trim().length < 9
+													? 'border-destructive/50 focus:ring-destructive/20'
+													: ''}"
+										/>
+									</div>
+									{#if citizenCccd.length > 0 && citizenCccd.trim().length < 9}
+										<p class="text-xs text-destructive font-medium ml-1">Số CCCD phải có ít nhất 9 ký tự.</p>
+									{/if}
 								</div>
+
+								<!-- Email field (optional) -->
+								<div class="space-y-2">
+									<Label for="citizen-email" class="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Địa chỉ Email (Tùy chọn)</Label>
+									<div class="relative group">
+										<Mail size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+										<input
+											id="citizen-email"
+											type="email"
+											placeholder="username@example.com"
+											bind:value={citizenEmail}
+											class="w-full rounded-2xl border border-muted-foreground/20 bg-muted/20 pl-11 pr-4 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
+										/>
+									</div>
+								</div>
+
 								<div class="flex items-start gap-3 p-4 rounded-2xl bg-primary/5 text-primary/70 border border-primary/10 transition-all hover:bg-primary/10">
 									<AlertCircle size={16} class="mt-0.5 shrink-0" />
-									<p class="text-xs leading-relaxed font-medium">Chúng tôi sẽ gửi kết quả trích xuất AI và mã theo dõi hồ sơ ngay khi bạn nộp thành công.</p>
+									<p class="text-xs leading-relaxed font-medium">Số CCCD được dùng để bảo mật và xác thực khi tra cứu hồ sơ. Vui lòng nhập chính xác.</p>
 								</div>
 							</div>
 						</div>
 					{:else}
-						<!-- Step 3: Priority -->
+						<!-- Step 3: Document Type -->
 						<div in:fly={{ x: 20, duration: 400, delay: 200, easing: cubicOut }} out:fly={{ x: -20, duration: 300, easing: cubicOut }} class="space-y-8 py-2">
 							<div class="space-y-2 text-center">
-								<h2 class="text-2xl font-bold tracking-tight">Cấu hình hoàn tất</h2>
-								<p class="text-sm text-muted-foreground">Chọn mức độ xử lý và tiến hành gửi hồ sơ cho AI</p>
+								<h2 class="text-2xl font-bold tracking-tight">Chọn loại hồ sơ</h2>
+								<p class="text-sm text-muted-foreground">Xác định đối tượng chủ hồ sơ để AI xử lý chính xác hơn</p>
 							</div>
 
-							<div class="space-y-4">
-								<Label class="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Tùy chọn xử lý</Label>
-								<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-									{#each PRIORITY_OPTIONS as opt}
-										<label
-											class="relative flex cursor-pointer flex-col p-5 rounded-2xl border-2 transition-all duration-300
-												{priority === opt.value
-												? 'border-primary bg-primary/5 shadow-inner'
-												: 'border-muted-foreground/10 bg-muted/10 hover:border-primary/30 hover:bg-muted/30'}"
-										>
-											<input type="radio" name="priority" value={opt.value} bind:group={priority} class="sr-only" />
-											<span class="text-sm font-bold {priority === opt.value ? 'text-primary' : 'text-foreground'}">{opt.label}</span>
-											<span class="mt-1 text-[10px] font-medium text-muted-foreground leading-tight">{opt.description}</span>
-											
-											{#if priority === opt.value}
-												<div class="absolute top-4 right-4 animate-in zoom-in-50">
-													<CheckCircle size={16} class="text-primary" />
-												</div>
-											{/if}
-										</label>
-									{/each}
-								</div>
+							<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+								{#each DOC_TYPE_OPTIONS as opt}
+									<label
+										class="relative flex cursor-pointer flex-col items-center text-center p-6 rounded-2xl border-2 transition-all duration-300
+											{documentType === opt.value
+											? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
+											: 'border-muted-foreground/10 bg-muted/10 hover:border-primary/30 hover:bg-muted/30'}"
+									>
+										<input type="radio" name="documentType" value={opt.value} bind:group={documentType} class="sr-only" />
+										<span class="text-3xl mb-3 block">{opt.icon}</span>
+										<span class="text-sm font-bold {documentType === opt.value ? 'text-primary' : 'text-foreground'}">{opt.label}</span>
+										<span class="mt-1.5 text-[10px] font-medium text-muted-foreground leading-tight">{opt.description}</span>
+										{#if documentType === opt.value}
+											<div class="absolute top-3 right-3 animate-in zoom-in-50">
+												<CheckCircle size={16} class="text-primary" />
+											</div>
+										{/if}
+									</label>
+								{/each}
 							</div>
 
 							{#if isError}
@@ -333,14 +416,21 @@
 					{/if}
 
 					{#if currentStep < 3}
-						<Button type="button" onclick={nextStep} disabled={!file} class="h-12 px-8 font-bold gap-2 shadow-lg shadow-primary/20 rounded-xl">
+						<button
+							type="button"
+							onclick={nextStep}
+							disabled={currentStep === 1 ? files.length === 0 : currentStep === 2 ? citizenCccd.trim().length < 9 : false}
+							class="flex items-center gap-2 h-12 px-8 font-bold shadow-lg shadow-primary/20 rounded-xl
+								bg-primary hover:bg-primary/90 text-primary-foreground transition-all
+								disabled:opacity-40 disabled:cursor-not-allowed"
+						>
 							Tiếp tục
 							<ArrowRight size={18} />
-						</Button>
+						</button>
 					{:else}
 						<Button
 							type="submit"
-							disabled={!file || isPending}
+							disabled={files.length === 0 || isPending}
 							class="h-12 px-8 min-w-[160px] font-bold shadow-xl shadow-primary/25 rounded-xl group relative overflow-hidden"
 						>
 							{#if isPending}

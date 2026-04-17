@@ -40,5 +40,18 @@ export const emailService = {
 			subject: `[DVC] Thông báo kết quả: Hồ sơ #${trackingCode}`,
 			html
 		});
+	},
+
+	/**
+	 * Send notification when Bộ phận Một cửa assigns the document to a department.
+	 * This is the "official reception" confirmation the citizen receives.
+	 */
+	async notifyDocumentAssigned(to: string, name: string, trackingCode: string, deptLabel: string) {
+		const html = templates.getAssignedTemplate(name, trackingCode, deptLabel);
+		return await sendEmail({
+			to,
+			subject: `[DVC] Hồ sơ #${trackingCode} đã được tiếp nhận và phân công xử lý`,
+			html
+		});
 	}
 };

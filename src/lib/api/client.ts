@@ -5,7 +5,7 @@
  * In real mode, calls /api/* on the same origin (proxied to core-api).
  */
 
-import type { DocumentSummary, HitlTask } from './types';
+import type { DocumentSummary } from './types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -61,8 +61,8 @@ function asIsoDate(value: unknown, fallback: string): string {
 function normalizeStatus(v: unknown) {
 	return asString(v)?.toUpperCase() ?? 'RECEIVED';
 }
-function normalizePriority(v: unknown) {
-	return asString(v)?.toUpperCase() ?? 'NORMAL';
+function normalizeDocumentType(v: unknown) {
+	return asString(v)?.toUpperCase() ?? 'CA_NHAN';
 }
 function normalizeSecurityLevel(v: unknown) {
 	return asString(v)?.toUpperCase() ?? 'UNCLASSIFIED';
@@ -115,11 +115,11 @@ function normalizeDocument(base: JsonRecord, detail: JsonRecord | undefined, ind
 	return {
 		id: baseId,
 		trackingCode,
-		status: normalizeStatus(base['status'] ?? detail?.['status']),
-		priority: normalizePriority(base['priority'] ?? detail?.['priority']),
+		status: normalizeStatus(base['status'] ?? detail?.['status']) as import('./types').DocumentStatus,
+		documentType: normalizeDocumentType(base['documentType'] ?? base['document_type'] ?? detail?.['documentType']) as import('./types').DocumentType,
 		securityLevel: normalizeSecurityLevel(
 			base['securityLevel'] ?? base['security_level'] ?? detail?.['securityLevel']
-		),
+		) as import('./types').SecurityLevel,
 		aiConfidence: asNumber(
 			base['aiConfidence'] ?? base['confidence'] ?? base['score'] ?? detail?.['aiConfidence']
 		),
@@ -133,7 +133,6 @@ function normalizeDocument(base: JsonRecord, detail: JsonRecord | undefined, ind
 // ─── Mock cache ───────────────────────────────────────────────────────────────
 
 let mockDocumentsCache: DocumentSummary[] | null = null;
-let mockTasksCache: HitlTask[] | null = null;
 
 async function getMockDocuments(forceReload = false): Promise<DocumentSummary[]> {
 	if (mockDocumentsCache && !forceReload) return mockDocumentsCache;
@@ -159,26 +158,7 @@ async function getMockDocuments(forceReload = false): Promise<DocumentSummary[]>
 	return mockDocumentsCache;
 }
 
-function buildMockTasks(documents: DocumentSummary[]): HitlTask[] {
-	return documents
-		.filter((d) => d.status === 'HITL_REVIEW')
-		.map((d, i) => ({
-			id: `mock-task-${i + 1}`,
-			documentId: d.id,
-			taskType: 'AI_REVIEW',
-			assignedRole: 'CHUYEN_VIEN',
-			status: 'PENDING',
-			createdAt: d.createdAt,
-			document: { trackingCode: d.trackingCode, priority: d.priority, slaDeadline: d.slaDeadline }
-		}));
-}
 
-async function getMockTasks(forceReload = false): Promise<HitlTask[]> {
-	if (mockTasksCache && !forceReload) return mockTasksCache;
-	const documents = await getMockDocuments(forceReload);
-	mockTasksCache = buildMockTasks(documents);
-	return mockTasksCache;
-}
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
@@ -215,12 +195,14 @@ async function withMockFallback<T>(
 // ─── Documents API ────────────────────────────────────────────────────────────
 
 export const documentsApi = {
-	list: (params?: { status?: string; priority?: string }) =>
+	list: (params?: { status?: string; documentType?: string; page?: number; limit?: number }) =>
 		withMockFallback(
 			async () => {
 				const qs = new URLSearchParams();
-				if (params?.status) qs.set('status', params.status);
-				if (params?.priority) qs.set('priority', params.priority);
+				if (params?.status)       qs.set('status', params.status);
+				if (params?.documentType) qs.set('documentType', params.documentType);
+				if (params?.page)         qs.set('page', String(params.page));
+				if (params?.limit)        qs.set('limit', String(params.limit));
 				return apiFetch<{ documents: DocumentSummary[]; total: number }>(
 					`/documents${qs.toString() ? `?${qs}` : ''}`
 				);
@@ -228,11 +210,14 @@ export const documentsApi = {
 			async () => {
 				const documents = await getMockDocuments();
 				const filtered = documents.filter((d) => {
-					if (params?.status && d.status !== params.status) return false;
-					if (params?.priority && d.priority !== params.priority) return false;
+					if (params?.status       && d.status       !== params.status)       return false;
+					if (params?.documentType && d.documentType !== params.documentType) return false;
 					return true;
 				});
-				return { documents: filtered, total: filtered.length };
+				const page  = params?.page  ?? 1;
+				const limit = params?.limit ?? 50;
+				const start = (page - 1) * limit;
+				return { documents: filtered.slice(start, start + limit), total: filtered.length };
 			}
 		),
 
@@ -276,44 +261,7 @@ export const documentsApi = {
 		})
 };
 
-// ─── HITL API ─────────────────────────────────────────────────────────────────
 
-export const hitlApi = {
-	listTasks: () =>
-		withMockFallback(
-			() => apiFetch<{ tasks: HitlTask[] }>('/hitl/tasks'),
-			async () => ({ tasks: await getMockTasks() })
-		),
-
-	claimTask: (taskId: string) =>
-		withMockFallback(
-			() => apiFetch(`/hitl/tasks/${taskId}/claim`, { method: 'POST' }),
-			async () => {
-				const tasks = await getMockTasks();
-				const task = tasks.find((t) => t.id === taskId);
-				if (!task) throw new Error(`Task not found: ${taskId}`);
-				task.status = 'IN_PROGRESS';
-				return task;
-			}
-		),
-
-	resolveTask: (taskId: string, resolutionData: Record<string, unknown>) =>
-		withMockFallback(
-			() =>
-				apiFetch(`/hitl/tasks/${taskId}/resolve`, {
-					method: 'POST',
-					body: JSON.stringify({ resolutionData })
-				}),
-			async () => {
-				const tasks = await getMockTasks();
-				const task = tasks.find((t) => t.id === taskId);
-				if (!task) throw new Error(`Task not found: ${taskId}`);
-				task.status = 'RESOLVED';
-				mockTasksCache = tasks.filter((t) => t.id !== taskId);
-				return { taskId, resolutionData, message: 'Resolved in mock mode' };
-			}
-		)
-};
 
 // ─── AI API ───────────────────────────────────────────────────────────────────
 

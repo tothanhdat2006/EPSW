@@ -177,3 +177,19 @@ export function getRejectedTemplate(name: string, trackingCode: string, reason: 
     `;
 	return getBaseTemplate(content, 'Thông báo kết quả Hồ sơ');
 }
+
+export function getAssignedTemplate(name: string, trackingCode: string, deptLabel: string) {
+	const content = `
+        <p>Kính chào <strong>${name}</strong>,</p>
+        <p>Chúng tôi xác nhận hồ sơ của bạn đã được <strong>Bộ phận Một cửa</strong> tiếp nhận chính thức và chuyển đến đơn vị chuyên trách để xử lý.</p>
+        <div class="status-card" style="border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.05);">
+            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #3b82f6; font-weight: 700;">Đã phân công xử lý</div>
+            <div class="tracking-code">${trackingCode}</div>
+            <p style="margin-top: 16px; font-size: 14px; color: #94a3b8;">
+                <strong>Đơn vị thụ lý:</strong> ${deptLabel}
+            </p>
+        </div>
+        <p>Bộ phận chuyên trách sẽ tiến hành thẩm tra và xử lý hồ sơ theo đúng quy trình. Bạn có thể theo dõi tiến độ bằng mã hồ sơ bên trên.</p>
+    `;
+	return getBaseTemplate(content, 'Hồ sơ đã được tiếp nhận');
+}

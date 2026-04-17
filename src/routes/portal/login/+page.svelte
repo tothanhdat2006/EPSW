@@ -36,15 +36,20 @@
 		isLoading = false;
 	}
 
-	const DEMO_EMAIL = 'admin@dvc.gov.vn';
+	const DEMO_ACCOUNTS = [
+		{ role: 'Admin', email: 'admin@dvc.gov.vn', dept: 'Quản trị hệ thống' },
+		{ role: 'Bộ phận Một cửa', email: 'motcua@dvc.gov.vn', dept: 'Tiếp nhận HS' },
+		{ role: 'Chuyên viên Sở', email: 'chuyenvien@dvc.gov.vn', dept: 'Sở Kế hoạch & Đầu tư' },
+		{ role: 'Lãnh đạo', email: 'lanhdao@dvc.gov.vn', dept: 'Sở Kế hoạch & Đầu tư' },
+	];
 	const DEMO_PASSWORD = 'Admin@DVC2025!';
-	let filled = $state(false);
+	let filledIndex = $state<number | null>(null);
 
-	function fillDemo() {
-		email = DEMO_EMAIL;
+	function fillDemo(index: number) {
+		email = DEMO_ACCOUNTS[index].email;
 		password = DEMO_PASSWORD;
-		filled = true;
-		setTimeout(() => filled = false, 1500);
+		filledIndex = index;
+		setTimeout(() => filledIndex = null, 1500);
 	}
 </script>
 
@@ -159,29 +164,24 @@
 
 			<!-- Demo credentials hint -->
 			<div class="mt-8 border-t border-border/40 pt-6">
-				<p class="text-center text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-3">Tài khoản mẫu cho demo</p>
-				<button
-					type="button"
-					onclick={fillDemo}
-					class="w-full rounded-xl border font-mono text-xs transition-all duration-200 active:scale-[0.98]
-						{filled
-							? 'border-emerald-500/40 bg-emerald-500/10 shadow-sm shadow-emerald-500/10'
-							: 'border-border/30 bg-muted/20 hover:border-primary/30 hover:bg-primary/5 hover:shadow-sm hover:shadow-primary/10'}"
-				>
-					<div class="p-4 space-y-1.5">
-						<div class="flex justify-between items-center">
-							<span class="text-muted-foreground">Email:</span>
-							<span class="{filled ? 'text-emerald-500' : 'text-primary'} font-bold transition-colors">{DEMO_EMAIL}</span>
-						</div>
-						<div class="flex justify-between items-center">
-							<span class="text-muted-foreground">Mật khẩu:</span>
-							<span class="{filled ? 'text-emerald-500' : 'text-primary'} font-bold transition-colors">{DEMO_PASSWORD}</span>
-						</div>
-						<p class="text-center text-muted-foreground/50 text-[10px] pt-1 uppercase tracking-widest">
-							{filled ? '✓ Đã điền thông tin' : '↑ Bấm để tự động điền'}
-						</p>
-					</div>
-				</button>
+				<p class="text-center text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 mb-4">Tài khoản trải nghiệm nhanh</p>
+				<div class="grid grid-cols-2 gap-3">
+					{#each DEMO_ACCOUNTS as acc, i}
+						<button
+							type="button"
+							onclick={() => fillDemo(i)}
+							class="text-left rounded-xl border p-3 transition-all duration-200 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary/20
+								{filledIndex === i
+									? 'border-emerald-500 bg-emerald-500/10 shadow-sm shadow-emerald-500/20'
+									: 'border-border/30 bg-muted/20 hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm hover:shadow-primary/10'}"
+						>
+							<div class="flex flex-col gap-1">
+								<span class="text-[11px] font-black {filledIndex === i ? 'text-emerald-500' : 'text-foreground'}">{acc.role}</span>
+								<span class="text-[10px] text-muted-foreground truncate">{acc.dept}</span>
+							</div>
+						</button>
+					{/each}
+				</div>
 			</div>
 		</div>
 

@@ -29,9 +29,9 @@
 		<header class="sticky top-0 z-50 border-b border-border/40 bg-background/60 backdrop-blur-xl shadow-sm">
 			<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
 				<a href="/" class="flex items-center gap-3 group">
-					<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 shadow-md group-hover:shadow-primary/20 transition-all">
+					<!-- <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 shadow-md group-hover:shadow-primary/20 transition-all">
 						<span class="text-sm font-extrabold text-white">DVC</span>
-					</div>
+					</div> -->
 					<div>
 						<p class="font-bold leading-tight text-foreground tracking-wide group-hover:text-primary transition-colors">Cổng Dịch vụ Công</p>
 						<p class="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-0.5">Nộp và tra cứu hồ sơ trực tuyến</p>

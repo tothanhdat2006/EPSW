@@ -18,7 +18,9 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
-		"seed:admin": "npx tsx scripts/seed-admin.ts"
+		"seed": "npx tsx scripts/seed-admin.ts",
+		"seed:admin": "npx tsx scripts/seed-admin.ts",
+		"seed:sla": "npx tsx scripts/seed-sla-test.ts"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "~1.4.21",
@@ -64,6 +66,8 @@
 		"wrangler": "^4.83.0"
 	},
 	"dependencies": {
+		"mupdf": "^1.27.0",
+		"openai": "^6.34.0",
 		"resend": "^6.12.0"
 	}
 }

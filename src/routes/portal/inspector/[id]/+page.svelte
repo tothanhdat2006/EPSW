@@ -17,7 +17,7 @@
 
 	// ─── Props ────────────────────────────────────────────────────────────────
 
-	const documentId = $derived(page.params.documentId ?? null);
+	const documentId = $derived(page.params.id ?? null);
 
 	// ─── State ────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,7 @@
 	let isChatLoading = $state(false);
 	let isReAnalyzing = $state(false);
 	let isSaving = $state(false);
+	let selectedFileIndex = $state(0);
 
 	// ─── Data loading ─────────────────────────────────────────────────────────
 
@@ -68,9 +69,13 @@
 		return url;
 	}
 
-	const currentFileUrl = $derived(
-		proxiedUrl(showRedacted ? document?.redactedFileUrl : document?.rawFileUrl)
-	);
+	const fileUrls = $derived.by(() => {
+		if (showRedacted && document?.redactedFileUrl) return [proxiedUrl(document.redactedFileUrl)!];
+		if (document?.rawFileUrls) return document.rawFileUrls.map(u => proxiedUrl(u)!).filter(Boolean);
+		return [];
+	});
+
+	const currentFileUrl = $derived(fileUrls[selectedFileIndex] || fileUrls[0]);
 
 	// ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -177,7 +182,7 @@
 		<div class="flex flex-1 overflow-hidden p-6 gap-6">
 			<!-- Left: File viewer -->
 			<Card class="flex flex-1 flex-col overflow-hidden glass-card shadow-2xl relative group">
-				{#if !currentFileUrl}
+				{#if fileUrls.length === 0}
 					<div
 						class="flex h-full flex-col items-center justify-center bg-muted/10 p-12 text-muted-foreground"
 					>
@@ -185,9 +190,9 @@
 						<p>Không có Data Object Mapping</p>
 					</div>
 				{:else}
-					{@const isPdf = currentFileUrl.toLowerCase().endsWith('.pdf')}
+					{@const isPdf = currentFileUrl?.toLowerCase().endsWith('.pdf')}
 					<!-- File bar -->
-					<div class="flex items-center justify-between border-b border-border/40 bg-muted/40 px-4 py-3 backdrop-blur-md z-10">
+					<div class="flex items-center justify-between border-b border-border/40 bg-muted/40 px-4 py-3 backdrop-blur-md z-10 w-full overflow-x-auto gap-4">
 						<div class="flex items-center gap-3">
 							<div class="p-1.5 rounded-md bg-background border border-border/50">
 								{#if isPdf}
@@ -196,10 +201,23 @@
 									<ImageIcon size={16} class="text-blue-500" />
 								{/if}
 							</div>
-							<span class="text-sm font-bold tracking-wide uppercase text-foreground">
+							<span class="text-sm font-bold tracking-wide uppercase text-foreground whitespace-nowrap">
 								{showRedacted ? 'Visual Masked' : 'Visual Origin'}
 							</span>
 						</div>
+
+						{#if fileUrls.length > 1}
+							<div class="flex bg-muted/30 p-1 rounded-lg shrink-0 gap-1">
+								{#each fileUrls as url, idx}
+									<button 
+										class="px-3 py-1.5 rounded-md text-xs font-bold transition-all {selectedFileIndex === idx ? 'bg-background shadow-sm text-primary ring-1 ring-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}"
+										onclick={() => selectedFileIndex = idx}
+									>
+										Tệp {idx + 1}
+									</button>
+								{/each}
+							</div>
+						{/if}
 						<Button
 							href={currentFileUrl}
 							target="_blank"

@@ -1,57 +1,59 @@
-/**
- * Admin Account Seed Script
- * 
- * Creates the default admin account for the DVC portal.
- * 
- * Usage:
- *   npx tsx scripts/seed-admin.ts
- * 
- * Requires BETTER_AUTH_SECRET and CLOUDFLARE_D1_TOKEN to be set in .env
- */
+import { execSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-const ADMIN_EMAIL = 'admin@dvc.gov.vn';
-const ADMIN_PASSWORD = 'Admin@DVC2025!';
-const ADMIN_NAME = 'Quản trị viên DVC';
+const USERS = [
+	{ email: 'admin@dvc.gov.vn', name: 'Quản trị viên', password: 'Admin@DVC2025!', role: 'admin', department: null },
+	{ email: 'motcua@dvc.gov.vn', name: 'Bộ phận Một cửa', password: 'Admin@DVC2025!', role: 'mot_cua', department: null },
+	{ email: 'chuyenvien@dvc.gov.vn', name: 'Chuyên viên Sở', password: 'Admin@DVC2025!', role: 'chuyen_vien', department: 'SO_KE_HOACH_DAU_TU' },
+	{ email: 'lanhdao@dvc.gov.vn', name: 'Lãnh đạo', password: 'Admin@DVC2025!', role: 'lanh_dao', department: 'SO_KE_HOACH_DAU_TU' },
+];
 
-// For local dev, call the Better Auth API endpoint directly
-async function createAdminViaApi() {
-	const baseUrl = process.env.ORIGIN ?? 'http://localhost:5173';
-	
-	console.log(`\n🔐 Creating admin account at ${baseUrl}...\n`);
-	
-	const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Origin': baseUrl
-		},
-		body: JSON.stringify({
-			email: ADMIN_EMAIL,
-			password: ADMIN_PASSWORD,
-			name: ADMIN_NAME
-		})
-	});
-
-	const data = await res.json();
-
-	if (!res.ok) {
-		if (data?.error?.message?.includes('already exists') || res.status === 422) {
-			console.log('✅ Admin account already exists — nothing to do.\n');
-			return;
-		}
-		console.error('❌ Failed to create admin account:', data);
-		process.exit(1);
-	}
-
-	console.log('✅ Admin account created successfully!\n');
-	console.log(`   📧 Email    : ${ADMIN_EMAIL}`);
-	console.log(`   🔑 Password : ${ADMIN_PASSWORD}`);
-	console.log(`   👤 Name     : ${ADMIN_NAME}`);
-	console.log(`   🛡️ Role     : admin (Manual patch applied)`);
-	console.log('\n⚠️  IMPORTANT: Change this password immediately after first login!\n');
+function findSqliteFiles(dir: string) {
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir)
+		.filter((f) => f.endsWith('.sqlite') && !f.startsWith('metadata'))
+		.map((f) => join(dir, f));
 }
 
-createAdminViaApi().catch((err) => {
-	console.error('Unexpected error:', err);
-	process.exit(1);
-});
+async function seedUsers() {
+	const baseUrl = process.env.ORIGIN ?? 'http://localhost:5173';
+	console.log(`\n🔐 Seeding accounts at ${baseUrl}...\n`);
+	
+	for (const u of USERS) {
+		console.log(`Creating user ${u.email}...`);
+		const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', 'Origin': baseUrl },
+			body: JSON.stringify({ email: u.email, password: u.password, name: u.name })
+		});
+
+		const data = await res.json();
+		if (!res.ok && !data?.error?.message?.includes('already exists') && res.status !== 422) {
+			console.error('❌ Failed to create user:', data);
+		} else {
+			console.log(`✅ User ${u.email} ready.`);
+		}
+	}
+	
+	console.log('\n⚙️ Patching roles and departments within D1 SQLite...');
+	const D1_STATE_DIR = '.wrangler/state/v3/d1/miniflare-D1DatabaseObject';
+	const sqliteFiles = findSqliteFiles(D1_STATE_DIR);
+	
+	if (sqliteFiles.length > 0) {
+		for (const dbFile of sqliteFiles) {
+			for (const u of USERS) {
+				const deptVal = u.department ? `'${u.department}'` : 'NULL';
+				const sql = `UPDATE user SET role = '${u.role}', department = ${deptVal} WHERE email = '${u.email}';`;
+				try {
+					execSync(`sqlite3 "${dbFile}" "${sql}"`);
+					console.log(`   Patched ${u.email} -> ${u.role}`);
+				} catch (e) {
+					console.error(`   Failed to patch ${u.email}`);
+				}
+			}
+		}
+	}
+}
+
+seedUsers().catch(console.error);

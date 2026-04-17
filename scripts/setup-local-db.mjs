@@ -17,6 +17,11 @@ const MIGRATIONS = [
 	"ALTER TABLE user ADD COLUMN ban_reason TEXT",
 	"ALTER TABLE user ADD COLUMN ban_expires INTEGER",
 	"ALTER TABLE session ADD COLUMN impersonated_by TEXT",
+	"ALTER TABLE document ADD COLUMN citizen_cccd TEXT",
+	"ALTER TABLE document ADD COLUMN document_type TEXT NOT NULL DEFAULT 'CA_NHAN'",
+	"ALTER TABLE user ADD COLUMN department TEXT",
+	"ALTER TABLE document ADD COLUMN assigned_by TEXT",
+	"ALTER TABLE document ADD COLUMN assignment_note TEXT",
 ];
 
 function runSql(dbFile, sql) {

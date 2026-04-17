@@ -15,7 +15,11 @@ const authConfig = ({
 		additionalFields: {
 			role: {
 				type: 'string',
-				defaultValue: 'staff'
+				defaultValue: 'mot_cua'
+			},
+			department: {
+				type: 'string',
+				required: false
 			}
 		}
 	},

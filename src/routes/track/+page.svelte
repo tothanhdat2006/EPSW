@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, Clock, CheckCircle, XCircle, AlertTriangle, Loader, FileSearch, ArrowRight } from 'lucide-svelte';
+	import { Search, Clock, CheckCircle, XCircle, AlertTriangle, Loader, FileSearch, ArrowRight, CreditCard } from 'lucide-svelte';
 	import { format, formatDistanceToNow } from 'date-fns';
 	import { vi } from 'date-fns/locale';
 	import type { DocumentSummary } from '$lib/api/types';
@@ -8,38 +8,49 @@
 
 	const STATUS_STEPS = [
 		{ key: 'RECEIVED', label: 'Đã nhận hồ sơ', icon: CheckCircle },
-		{ key: 'PROCESSING', label: 'Đang xử lý AI', icon: Loader },
-		{ key: 'HITL_REVIEW', label: 'Kiểm tra thủ công', icon: AlertTriangle },
+		{ key: 'PROCESSING', label: 'Đang xử lý', icon: Loader },
 		{ key: 'VALIDATED', label: 'Hợp lệ — Chờ phê duyệt', icon: Clock },
-		{ key: 'APPROVED', label: 'Đã phê duyệt', icon: CheckCircle },
-		{ key: 'PUBLISHED', label: 'Đã phát hành', icon: CheckCircle }
+		{ key: 'APPROVED', label: 'Đã phê duyệt', icon: CheckCircle }
 	];
 
 	const STATUS_DESCRIPTIONS: Record<string, string> = {
 		RECEIVED: 'Hệ thống đã nhận được hồ sơ của bạn và đang chuẩn bị xử lý.',
-		PROCESSING: 'Hệ thống AI đang phân tích và trích xuất thông tin từ hồ sơ.',
-		HITL_REVIEW: 'Chuyên viên đang kiểm tra và xác minh nội dung hồ sơ.',
-		VALIDATED: 'Hồ sơ đã được xác nhận hợp lệ và đang chờ lãnh đạo phê duyệt.',
-		APPROVED: 'Lãnh đạo đã phê duyệt. Hồ sơ đang được xử lý cuối cùng.',
-		PUBLISHED: 'Hồ sơ đã được phát hành. Kết quả đã được gửi đến bạn.',
-		REJECTED: 'Hồ sơ không đáp ứng yêu cầu. Vui lòng kiểm tra email để biết lý do.'
+		ASSIGNED: 'Hồ sơ đã được phân công cho Sở/Ngành và đang được thụ lý.',
+		PROCESSING: 'Hệ thống đang xử lý và phân tích hồ sơ.',
+		VALIDATED: 'Hồ sơ đã được xác nhận hợp lệ.',
+		PENDING_APPROVAL: 'Hồ sơ đã được thẩm định và đang trình chờ Lãnh đạo phê duyệt.',
+		REVISION_REQUESTED: 'Hồ sơ cần được bổ sung hoặc chỉnh sửa lại nội dung chuyên môn.',
+		APPROVED: 'Lãnh đạo đã phê duyệt hồ sơ. Quá trình xử lý đã hoàn tất.',
+		REJECTED: 'Hồ sơ không đáp ứng yêu cầu. Vui lòng kiểm tra email để biết lý do.',
+		INVALID: 'Hồ sơ không hơp lệ hoặc thiếu biên bản. Vui lòng kiểm tra email để cung cấp bổ sung.'
 	};
 
-	const PRIORITY_LABELS: Record<string, string> = { NORMAL: 'Thường', URGENT: 'Khẩn', FLASH: 'Hỏa tốc' };
-	const PRIORITY_COLORS: Record<string, string> = {
-		NORMAL: 'bg-muted/60 text-muted-foreground border-border/30',
-		URGENT: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
-		FLASH: 'bg-red-500/10 text-red-500 border-red-500/30'
+	import { DOCUMENT_TYPE_LABELS } from '$lib/api/types';
+
+	const DOC_TYPE_COLORS: Record<string, string> = {
+		CA_NHAN:       'bg-blue-500/10 text-blue-400 border-blue-500/30',
+		HO_KINH_DOANH: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+		DOANH_NGHIEP:  'bg-violet-500/10 text-violet-400 border-violet-500/30'
 	};
 
 	function getStepIndex(status: string): number {
-		if (status === 'REJECTED') return -1;
-		return STATUS_STEPS.findIndex((s) => s.key === status);
+		if (status === 'REJECTED' || status === 'INVALID') return -1;
+		switch(status) {
+			case 'RECEIVED': return 0;
+			case 'ASSIGNED': return 1;
+			case 'PROCESSING': return 1;
+			case 'REVISION_REQUESTED': return 1;
+			case 'VALIDATED': return 2;
+			case 'PENDING_APPROVAL': return 2;
+			case 'APPROVED': return 4;
+			default: return -1;
+		}
 	}
 
 	// ─── State ─────────────────────────────────────────────────────────────────
 
 	let trackingInput = $state('');
+	let cccdInput = $state('');
 	let submittedCode = $state('');
 	let data = $state<DocumentSummary | null>(null);
 	let isLoading = $state(false);
@@ -50,16 +61,23 @@
 
 	// ─── Fetch logic ───────────────────────────────────────────────────────────
 
-	async function fetchStatus(code: string) {
+	async function fetchStatus(code: string, cccd: string) {
 		isLoading = true;
 		isError = false;
 		try {
-			const res = await fetch(`/api/documents/${code}`);
-			if (!res.ok) throw new Error(res.status === 404 ? 'Không tìm thấy hồ sơ.' : `Lỗi ${res.status}`);
+			const url = `/api/documents/${encodeURIComponent(code)}?cccd=${encodeURIComponent(cccd)}`;
+			const res = await fetch(url);
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({})) as { message?: string };
+				throw new Error(
+					body?.message ?? (res.status === 404 ? 'Không tìm thấy hồ sơ.' :
+					res.status === 403 ? 'Số CCCD không khớp. Vui lòng kiểm tra lại.' : `Lỗi ${res.status}`)
+				);
+			}
 			data = await res.json();
 			if (pollingTimer) clearInterval(pollingTimer);
 			if (data?.status === 'RECEIVED' || data?.status === 'PROCESSING') {
-				pollingTimer = setInterval(() => fetchStatus(code), 5000);
+				pollingTimer = setInterval(() => fetchStatus(code, cccd), 5000);
 			}
 		} catch (e) {
 			isError = true;
@@ -72,9 +90,9 @@
 
 	function handleSearch(e: SubmitEvent) {
 		e.preventDefault();
-		if (!trackingInput.trim()) return;
+		if (!trackingInput.trim() || !cccdInput.trim()) return;
 		submittedCode = trackingInput.trim().toUpperCase();
-		fetchStatus(submittedCode);
+		fetchStatus(submittedCode, cccdInput.trim());
 	}
 
 	$effect(() => () => {
@@ -82,7 +100,7 @@
 	});
 
 	const currentStepIndex = $derived(data ? getStepIndex(data.status) : -1);
-	const isRejected = $derived(data?.status === 'REJECTED');
+	const isRejected = $derived(data?.status === 'REJECTED' || data?.status === 'INVALID');
 </script>
 
 <svelte:head>
@@ -106,34 +124,52 @@
 	</div>
 
 	<!-- Search form -->
-	<form onsubmit={handleSearch} class="mb-8">
-		<div class="flex gap-3 glass-card rounded-2xl border border-border/40 p-2">
-			<div class="relative flex-1">
-				<Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
-				<input
-					id="tracking-input"
-					type="text"
-					bind:value={trackingInput}
-					placeholder="VD: DVC-1736000000000-ABCD1234"
-					class="w-full rounded-xl bg-transparent py-3 pl-10 pr-4 font-mono text-sm text-foreground placeholder:text-muted-foreground/40 outline-none transition-all
-						focus:bg-muted/20"
-				/>
+	<form onsubmit={handleSearch} class="mb-8 space-y-3">
+		<div class="glass-card rounded-2xl border border-border/40 p-2">
+			<div class="flex gap-3">
+				<div class="relative flex-1">
+					<Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
+					<input
+						id="tracking-input"
+						type="text"
+						bind:value={trackingInput}
+						placeholder="VD: DVC-1736000000000-ABCD1234"
+						class="w-full rounded-xl bg-transparent py-3 pl-10 pr-4 font-mono text-sm text-foreground placeholder:text-muted-foreground/40 outline-none transition-all
+							focus:bg-muted/20"
+					/>
+				</div>
 			</div>
-			<button
-				type="submit"
-				disabled={!trackingInput.trim() || isLoading}
-				class="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground shadow-lg shadow-primary/20
-					transition-all hover:bg-primary/90 disabled:opacity-40 active:scale-[0.97]"
-			>
-				{#if isLoading}
-					<Loader size={16} class="animate-spin" />
-					Đang tìm...
-				{:else}
-					<Search size={16} />
-					Tra cứu
-					<ArrowRight size={14} class="opacity-60" />
-				{/if}
-			</button>
+		</div>
+		<div class="glass-card rounded-2xl border border-border/40 p-2">
+			<div class="flex gap-3">
+				<div class="relative flex-1">
+					<CreditCard size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
+					<input
+						id="cccd-input"
+						type="text"
+						maxlength="12"
+						bind:value={cccdInput}
+						placeholder="Số CCCD / CMND (bắt buộc)"
+						class="w-full rounded-xl bg-transparent py-3 pl-10 pr-4 font-mono text-sm text-foreground placeholder:text-muted-foreground/40 outline-none transition-all
+							focus:bg-muted/20"
+					/>
+				</div>
+				<button
+					type="submit"
+					disabled={!trackingInput.trim() || !cccdInput.trim() || isLoading}
+					class="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground shadow-lg shadow-primary/20
+						transition-all hover:bg-primary/90 disabled:opacity-40 active:scale-[0.97]"
+				>
+					{#if isLoading}
+						<Loader size={16} class="animate-spin" />
+						Đang tìm...
+					{:else}
+						<Search size={16} />
+						Tra cứu
+						<ArrowRight size={14} class="opacity-60" />
+					{/if}
+				</button>
+			</div>
 		</div>
 	</form>
 
@@ -179,19 +215,20 @@
 							Nộp lúc: {format(new Date(data.createdAt), "HH:mm 'ngày' dd/MM/yyyy", { locale: vi })}
 						</p>
 					</div>
-					<span class="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest {PRIORITY_COLORS[data.priority] ?? PRIORITY_COLORS.NORMAL}">
-						{PRIORITY_LABELS[data.priority] ?? data.priority}
+					<span class="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest
+						{DOC_TYPE_COLORS[data.documentType] ?? 'bg-muted/60 text-muted-foreground border-border/30'}">
+						{DOCUMENT_TYPE_LABELS[data.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? data.documentType}
 					</span>
 				</div>
 			</div>
 
 			<div class="p-7 space-y-7">
 				<!-- Status description banner -->
-				<div class="rounded-xl border p-4 {isRejected ? 'border-destructive/20 bg-destructive/5' : 'border-primary/20 bg-primary/5'}">
-					<p class="font-extrabold text-sm {isRejected ? 'text-destructive' : 'text-primary'}">
-						{isRejected ? '✗ Hồ sơ bị từ chối' : (STATUS_STEPS[currentStepIndex]?.label ?? data.status)}
+				<div class="rounded-xl border p-4 {isRejected ? 'border-destructive/20 bg-destructive/5' : data.status === 'APPROVED' ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-primary/20 bg-primary/5'}">
+					<p class="font-extrabold text-sm {isRejected ? 'text-destructive' : data.status === 'APPROVED' ? 'text-emerald-500' : 'text-primary'}">
+						{isRejected ? '✗ Hồ sơ bị từ chối' : (STATUS_STEPS[Math.min(currentStepIndex, STATUS_STEPS.length - 1)]?.label ?? data.status)}
 					</p>
-					<p class="mt-1.5 text-xs font-medium text-muted-foreground leading-relaxed">
+					<p class="mt-1.5 text-sm font-medium leading-relaxed {data.status === 'APPROVED' ? 'text-emerald-600/80 font-bold' : 'text-muted-foreground text-xs'}">
 						{STATUS_DESCRIPTIONS[data.status] ?? 'Đang cập nhật...'}
 					</p>
 				</div>
@@ -200,16 +237,16 @@
 				{#if !isRejected}
 					<div class="space-y-4">
 						<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tiến trình xử lý</p>
-						{#each STATUS_STEPS.filter((s) => s.key !== 'HITL_REVIEW' || data?.status === 'HITL_REVIEW') as step, index}
+						{#each STATUS_STEPS as step, index}
 							{@const stepDone = index < currentStepIndex}
 							{@const stepActive = index === currentStepIndex}
 							{@const stepPending = index > currentStepIndex}
 							<div class="flex items-center gap-4">
 								<!-- Dot/Icon -->
 								<div class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-all
-									{stepDone ? 'border-emerald-500/50 bg-emerald-500/15' : stepActive ? 'border-primary/50 bg-primary/15 animate-pulse' : 'border-border/30 bg-muted/20'}">
+									{stepDone ? 'border-emerald-400 bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]' : stepActive ? 'border-primary/50 bg-primary/15 animate-pulse' : 'border-border/30 bg-muted/20'}">
 									{#if stepDone}
-										<CheckCircle size={15} class="text-emerald-500" />
+										<CheckCircle size={16} class="text-white" />
 									{:else if stepActive}
 										<step.icon size={15} class="text-primary" />
 									{:else}
@@ -223,7 +260,7 @@
 								<!-- Label -->
 								<div class="flex-1">
 									<span class="text-sm font-bold
-										{stepDone ? 'text-emerald-500' : stepActive ? 'text-primary' : 'text-muted-foreground/40'}">
+										{stepDone ? 'text-emerald-400' : stepActive ? 'text-primary' : 'text-muted-foreground/40'}">
 										{step.label}
 									</span>
 								</div>
@@ -232,11 +269,15 @@
 									<span class="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
 										Đang xử lý
 									</span>
+								{:else if stepDone}
+									<span class="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+										Hoàn thành
+									</span>
 								{/if}
 							</div>
 							<!-- Connector line between steps -->
-							{#if index < STATUS_STEPS.filter((s) => s.key !== 'HITL_REVIEW' || data?.status === 'HITL_REVIEW').length - 1}
-								<div class="ml-[17px] h-4 w-0.5 rounded-full {stepDone ? 'bg-emerald-500/30' : 'bg-border/30'}"></div>
+							{#if index < STATUS_STEPS.length - 1}
+								<div class="ml-[17px] h-4 w-0.5 rounded-full {stepDone ? 'bg-emerald-500/60' : 'bg-border/30'}"></div>
 							{/if}
 						{/each}
 					</div>
@@ -270,8 +311,8 @@
 						</div>
 					{:else}
 						<div class="rounded-xl bg-muted/20 border border-border/30 p-4 space-y-1">
-							<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ưu tiên</p>
-							<p class="text-sm font-bold text-foreground">{PRIORITY_LABELS[data.priority] ?? data.priority}</p>
+							<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Loại hồ sơ</p>
+							<p class="text-sm font-bold text-foreground">{DOCUMENT_TYPE_LABELS[data.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? data.documentType}</p>
 						</div>
 					{/if}
 				</div>
@@ -285,9 +326,9 @@
 			<div class="mb-5 rounded-full border border-border/40 bg-muted/20 p-5">
 				<FileSearch size={32} class="text-muted-foreground/30" />
 			</div>
-			<p class="font-bold text-foreground">Nhập mã theo dõi ở trên</p>
+			<p class="font-bold text-foreground">Nhập mã theo dõi và Số CCCD ở trên</p>
 			<p class="mt-2 max-w-xs text-xs text-muted-foreground/60 leading-relaxed">
-				Mã theo dõi sẽ được cấp cho bạn sau khi nộp hồ sơ thành công thông qua hệ thống AI của DVC.
+				Mã theo dõi được cấp sau khi nộp hồ sơ thành công. Số CCCD dùng để xác thực danh tính người nộp hồ sơ.
 			</p>
 		</div>
 	{/if}

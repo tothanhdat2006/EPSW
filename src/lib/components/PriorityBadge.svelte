@@ -1,22 +1,22 @@
 <script lang="ts">
-	const PRIORITY_STYLES: Record<string, string> = {
-		NORMAL: 'bg-gray-100 text-gray-600',
-		URGENT: 'bg-amber-100 text-amber-700',
-		FLASH: 'bg-red-100 text-red-700 font-semibold'
+	import type { DocumentType } from '$lib/api/types';
+
+	const STYLES: Record<DocumentType, string> = {
+		CA_NHAN:       'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+		HO_KINH_DOANH: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+		DOANH_NGHIEP:  'bg-violet-500/10 text-violet-400 border border-violet-500/20'
 	};
 
-	const PRIORITY_LABELS: Record<string, string> = {
-		NORMAL: 'Thường',
-		URGENT: 'Khẩn',
-		FLASH: 'Hỏa tốc'
+	const LABELS: Record<DocumentType, string> = {
+		CA_NHAN:       '👤 Cá nhân',
+		HO_KINH_DOANH: '🏪 Hộ KD',
+		DOANH_NGHIEP:  '🏢 Doanh nghiệp'
 	};
 
-	let { priority }: { priority: string } = $props();
+	let { documentType }: { documentType: DocumentType | string } = $props();
 </script>
 
-<span
-	class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs {PRIORITY_STYLES[priority] ??
-		'bg-gray-100 text-gray-600'}"
->
-	{PRIORITY_LABELS[priority] ?? priority}
+<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold
+	{STYLES[documentType as DocumentType] ?? 'bg-muted text-muted-foreground border border-border/30'}">
+	{LABELS[documentType as DocumentType] ?? documentType}
 </span>
