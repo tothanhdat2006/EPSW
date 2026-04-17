@@ -21,7 +21,9 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const USERS = [
 	// ── Admins ──────────────────────────────────────────────────────────────
@@ -108,17 +110,22 @@ function sqlString(value: string) {
 }
 
 function runLocalD1Command(databaseName: string, sql: string) {
-	const result = spawnSync(
-		'npx',
-		['wrangler', 'd1', 'execute', databaseName, '--local', '--command', `${sql};`],
-		{ encoding: 'utf8', stdio: 'pipe' }
-	);
-
-	if (result.status === 0) return true;
-
-	const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
-	if (details) console.error(details);
-	return false;
+	// Use --file instead of --command to avoid Windows shell quoting issues
+	const tmpFile = join(tmpdir(), `seed-patch-${Date.now()}.sql`);
+	try {
+		writeFileSync(tmpFile, sql + ';\n', 'utf8');
+		const result = spawnSync(
+			'npx',
+			['wrangler', 'd1', 'execute', databaseName, '--local', `--file=${tmpFile}`],
+			{ encoding: 'utf8', stdio: 'pipe' }
+		);
+		if (result.status === 0) return true;
+		const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
+		if (details) console.error('\n    ' + details);
+		return false;
+	} finally {
+		try { unlinkSync(tmpFile); } catch { /* ignore */ }
+	}
 }
 
 async function seedUsers() {
