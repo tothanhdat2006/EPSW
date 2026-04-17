@@ -1,6 +1,5 @@
-import { execSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const USERS = [
 	{ email: 'admin@dvc.gov.vn', name: 'Quản trị viên', password: 'Admin@DVC2025!', role: 'admin', department: null },
@@ -9,11 +8,35 @@ const USERS = [
 	{ email: 'lanhdao@dvc.gov.vn', name: 'Lãnh đạo', password: 'Admin@DVC2025!', role: 'lanh_dao', department: 'SO_KE_HOACH_DAU_TU' },
 ];
 
-function findSqliteFiles(dir: string) {
-	if (!existsSync(dir)) return [];
-	return readdirSync(dir)
-		.filter((f) => f.endsWith('.sqlite') && !f.startsWith('metadata'))
-		.map((f) => join(dir, f));
+const WRANGLER_CONFIG_FILE = 'wrangler.jsonc';
+const DEFAULT_LOCAL_D1_NAME = 'epsw-db';
+
+function getLocalDatabaseName() {
+	try {
+		const config = readFileSync(WRANGLER_CONFIG_FILE, 'utf8');
+		const match = config.match(/"database_name"\s*:\s*"([^"]+)"/);
+		if (match?.[1]) return match[1];
+	} catch {
+		// no-op
+	}
+	return DEFAULT_LOCAL_D1_NAME;
+}
+
+function sqlString(value: string) {
+	return `'${value.replace(/'/g, "''")}'`;
+}
+
+function runLocalD1Command(databaseName: string, sql: string) {
+	const result = spawnSync('npx', ['wrangler', 'd1', 'execute', databaseName, '--local', '--command', `${sql};`], {
+		encoding: 'utf8',
+		stdio: 'pipe'
+	});
+
+	if (result.status === 0) return true;
+
+	const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
+	if (details) console.error(details);
+	return false;
 }
 
 async function seedUsers() {
@@ -36,22 +59,17 @@ async function seedUsers() {
 		}
 	}
 	
-	console.log('\n⚙️ Patching roles and departments within D1 SQLite...');
-	const D1_STATE_DIR = '.wrangler/state/v3/d1/miniflare-D1DatabaseObject';
-	const sqliteFiles = findSqliteFiles(D1_STATE_DIR);
-	
-	if (sqliteFiles.length > 0) {
-		for (const dbFile of sqliteFiles) {
-			for (const u of USERS) {
-				const deptVal = u.department ? `'${u.department}'` : 'NULL';
-				const sql = `UPDATE user SET role = '${u.role}', department = ${deptVal} WHERE email = '${u.email}';`;
-				try {
-					execSync(`sqlite3 "${dbFile}" "${sql}"`);
-					console.log(`   Patched ${u.email} -> ${u.role}`);
-				} catch (e) {
-					console.error(`   Failed to patch ${u.email}`);
-				}
-			}
+	console.log('\n⚙️ Patching roles and departments within local D1...');
+	const localDbName = getLocalDatabaseName();
+
+	for (const u of USERS) {
+		const deptVal = u.department ? sqlString(u.department) : 'NULL';
+		const sql = `UPDATE user SET role = ${sqlString(u.role)}, department = ${deptVal} WHERE email = ${sqlString(u.email)}`;
+
+		if (runLocalD1Command(localDbName, sql)) {
+			console.log(`   Patched ${u.email} -> ${u.role}`);
+		} else {
+			console.error(`   Failed to patch ${u.email}`);
 		}
 	}
 }

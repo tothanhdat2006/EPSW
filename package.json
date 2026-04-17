@@ -18,12 +18,13 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
-		"seed": "npx tsx scripts/seed-admin.ts",
-		"seed:admin": "npx tsx scripts/seed-admin.ts",
-		"seed:sla": "npx tsx scripts/seed-sla-test.ts"
+		"seed": "tsx scripts/seed-admin.ts",
+		"seed:admin": "tsx scripts/seed-admin.ts",
+		"seed:sla": "tsx scripts/seed-sla-test.ts"
 	},
 	"devDependencies": {
-		"@better-auth/cli": "~1.4.21",
+		"@better-auth/cli": "~1.4.22",
+		"@better-auth/core": "~1.4.22",
 		"@eslint/compat": "^2.0.5",
 		"@eslint/js": "^10.0.1",
 		"@fontsource-variable/geist": "^5.2.8",
