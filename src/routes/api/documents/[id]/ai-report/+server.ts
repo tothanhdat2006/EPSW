@@ -93,36 +93,33 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 
 	const contentParts: ContentPart[] = [];
 
-	const systemPrompt = `Bạn là Chuyên viên tổng hợp có nhiệm vụ soạn thảo "Biên bản xử lý chuyên môn" cho một hồ sơ hành chính.
+	const systemPrompt = `Bạn là Chuyên viên tổng hợp hồ sơ hành chính.
 
-Dựa trên:
-1. Nội dung tài liệu đính kèm (hình ảnh các trang hồ sơ)
-2. Tóm tắt AI đã có: ${aiSummary || '(chưa có)'}
-3. Ý kiến thảo luận của cán bộ:
+Mục tiêu: soạn "Biên bản xử lý chuyên môn" rõ ràng, thực tế, dễ trình Lãnh đạo.
+
+Nguyên tắc bắt buộc:
+- Chỉ dùng thông tin có trong hồ sơ và ngữ cảnh được cung cấp.
+- Không bịa đặt, không suy diễn vượt dữ liệu.
+- Được phép trình bày linh hoạt (đoạn văn hoặc gạch đầu dòng), không bắt buộc đúng mẫu cứng I/II/III/IV.
+- Nếu thiếu thông tin, nêu rõ phần "chưa đủ cơ sở" thay vì tự điền.
+- Văn phong hành chính, ngắn gọn, tập trung vào quyết định xử lý.
+- Dòng CUỐI CÙNG phải là một trong hai:
+  "KẾT LUẬN: APPROVE" hoặc "KẾT LUẬN: REVISION_REQUESTED"
+- Không thêm nội dung nào sau dòng KẾT LUẬN.`;
+
+	const reviewContextPrompt = `Bối cảnh hồ sơ:
+1) Tóm tắt AI đã có: ${aiSummary || '(chưa có)'}
+2) Ý kiến thảo luận của cán bộ:
 ${commentBlock}
-4. Ý kiến luân chuyển trước đó:
+3) Ý kiến luân chuyển trước đó:
 ${feedbackBlock}
 
-Hãy soạn thảo Biên bản xử lý chuyên môn theo cấu trúc sau (dùng văn phong hành chính trang trọng, ngắn gọn):
+Yêu cầu đầu ra:
+- Soạn một biên bản xử lý chuyên môn linh hoạt theo tình huống thực tế.
+- Nên bao gồm: tóm tắt hồ sơ, nhận xét tính hợp lệ, tổng hợp ý kiến, và đề xuất xử lý.
+- Có thể thêm hoặc lược bớt mục nếu cần, miễn rõ ràng và hợp lý.`;
 
-**I. Tóm tắt nội dung hồ sơ**
-[2-3 câu mô tả loại hồ sơ, chủ thể nộp, nội dung yêu cầu]
-
-**II. Nhận xét về tính hợp lệ**
-[Đánh giá tính đầy đủ, hợp lệ của hồ sơ theo quy định]
-
-**III. Ý kiến của cán bộ thụ lý**
-[Tổng hợp các ý kiến thảo luận đã có]
-
-**IV. Đề xuất**
-[Chỉ một trong hai: "Đề nghị Lãnh đạo PHÊ DUYỆT" hoặc "Đề nghị YÊU CẦU SỬA ĐỔI bổ sung vì [lý do cụ thể]"]
-
-QUAN TRỌNG:
-- Dòng cuối cùng phải là một trong hai: "KẾT LUẬN: APPROVE" hoặc "KẾT LUẬN: REVISION_REQUESTED"
-- Không thêm bất kỳ chú thích nào sau dòng KẾT LUẬN
-- Chỉ dùng thông tin từ hồ sơ thực tế, không bịa đặt`;
-
-	contentParts.push({ type: 'text', text: systemPrompt });
+	contentParts.push({ type: 'text', text: reviewContextPrompt });
 
 	// Attach document pages as images
 	const rawFileUrlStr = doc['raw_file_url'] as string | undefined;
@@ -153,7 +150,13 @@ QUAN TRỌNG:
 	try {
 		console.log(`[ai-report] Calling model "${model}" with ${contentParts.length} parts`);
 		const completion = await openai.chat.completions.create(
-			{ model, messages: [{ role: 'user', content: contentParts as any }] },
+			{
+				model,
+				messages: [
+					{ role: 'system', content: systemPrompt },
+					{ role: 'user', content: contentParts as any }
+				]
+			},
 			{ timeout: 120000, maxRetries: 1 }
 		);
 		rawOutput = completion.choices[0]?.message?.content?.trim() || '';
@@ -167,14 +170,31 @@ QUAN TRỌNG:
 	let recommendation: 'APPROVE' | 'REVISION_REQUESTED' = 'APPROVE';
 	let reportText = rawOutput;
 
-	const conclusionLineIdx = lines.findLastIndex((l) => l.trim().startsWith('KẾT LUẬN:'));
+	let conclusionLineIdx = -1;
+	let conclusionValue = '';
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const match = lines[i].trim().match(/^K[ẾE]T LU[ẬA]N\s*:\s*(.+)$/i);
+		if (match) {
+			conclusionLineIdx = i;
+			conclusionValue = match[1].trim().toUpperCase();
+			break;
+		}
+	}
+
 	if (conclusionLineIdx !== -1) {
-		const conclusionLine = lines[conclusionLineIdx].trim();
-		if (conclusionLine.includes('REVISION_REQUESTED')) {
+		if (
+			conclusionValue.includes('REVISION_REQUESTED') ||
+			conclusionValue.includes('REVISION') ||
+			conclusionValue.includes('SUA_DOI') ||
+			conclusionValue.includes('YEU_CAU')
+		) {
 			recommendation = 'REVISION_REQUESTED';
 		}
 		// Strip the KẾT LUẬN line from the visible report
 		reportText = lines.slice(0, conclusionLineIdx).join('\n').trim();
+	} else if (rawOutput.toUpperCase().includes('REVISION_REQUESTED')) {
+		// Fallback if model missed the exact "KẾT LUẬN:" prefix
+		recommendation = 'REVISION_REQUESTED';
 	}
 
 	return json({ success: true, report: reportText, recommendation });
