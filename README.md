@@ -103,16 +103,22 @@ pnpm seed:admin
 pnpm seed
 ```
 
-Lệnh này sẽ tạo các tài khoản mặc định:
+> ⚠️ **Yêu cầu:** `pnpm dev` phải đang chạy trước vì script gọi API sign-up của server.
 
-| Tài khoản | Mật khẩu | Vai trò |
-|-----------|----------|---------|
-| `admin@epsw.gov.vn` | `Admin@123` | Quản trị viên |
-| `reception@epsw.gov.vn` | `Staff@123` | Cán bộ tiếp nhận |
-| `inspector@epsw.gov.vn` | `Staff@123` | Chuyên viên kiểm duyệt |
-| `leader@epsw.gov.vn` | `Staff@123` | Lãnh đạo phê duyệt |
+Lệnh này sẽ tạo các tài khoản sau:
 
-> ⚠️ Hãy đổi mật khẩu trước khi deploy lên production!
+| Email | Mật khẩu | Vai trò | Phòng ban |
+|-------|----------|---------|-----------|
+| `admin@dvc.gov.vn` | `Admin@DVC2025!` | `admin` | — |
+| `motcua@dvc.gov.vn` | `Admin@DVC2025!` | `mot_cua` | — |
+| `cv.tnmt@dvc.gov.vn` | `Admin@DVC2025!` | `chuyen_vien` | SO_TAI_NGUYEN_MOI_TRUONG |
+| `cv.khdt@dvc.gov.vn` | `Admin@DVC2025!` | `chuyen_vien` | SO_KE_HOACH_DAU_TU |
+| `cv.ubnd@dvc.gov.vn` | `Admin@DVC2025!` | `chuyen_vien` | UBND_TINH |
+| `ld.tnmt@dvc.gov.vn` | `Admin@DVC2025!` | `lanh_dao` | SO_TAI_NGUYEN_MOI_TRUONG |
+| `ld.khdt@dvc.gov.vn` | `Admin@DVC2025!` | `lanh_dao` | SO_KE_HOACH_DAU_TU |
+| `ld.ubnd@dvc.gov.vn` | `Admin@DVC2025!` | `lanh_dao` | UBND_TINH |
+
+> ⚠️ Đổi mật khẩu trước khi deploy lên production!
 
 ### Tạo dữ liệu test SLA (Cảnh báo deadline)
 
@@ -250,10 +256,10 @@ npx wrangler deploy
 
 | Role | Mô tả | Trang truy cập |
 |------|-------|----------------|
-| `admin` | Quản trị viên hệ thống | Tất cả |
-| `van_thu` | Cán bộ Văn thư / Tiếp nhận | Reception, Dashboard |
-| `chuyen_vien` | Chuyên viên xử lý | Inspector, Review, Dashboard |
-| `lanh_dao` | Lãnh đạo phê duyệt | Approval, Dashboard |
+| `admin` | Quản trị viên hệ thống | Tất cả + Quản lý nhân sự |
+| `mot_cua` | Bộ phận Một cửa — tiếp nhận & phân công | Reception, Dashboard |
+| `chuyen_vien` | Chuyên viên xử lý — xem & kiểm duyệt theo phòng ban | Inspector, Review, Dashboard |
+| `lanh_dao` | Lãnh đạo phê duyệt — phê duyệt theo phòng ban | Approval, Dashboard |
 
 ---
 
