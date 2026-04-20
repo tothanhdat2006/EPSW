@@ -114,11 +114,16 @@ function runLocalD1Command(databaseName: string, sql: string) {
 	const tmpFile = join(tmpdir(), `seed-patch-${Date.now()}.sql`);
 	try {
 		writeFileSync(tmpFile, sql + ';\n', 'utf8');
+		const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 		const result = spawnSync(
-			'npx',
+			npxBin,
 			['wrangler', 'd1', 'execute', databaseName, '--local', `--file=${tmpFile}`],
-			{ encoding: 'utf8', stdio: 'pipe' }
+			{ encoding: 'utf8', stdio: 'pipe', shell: process.platform === 'win32' }
 		);
+		if (result.error) {
+			console.error('\n    ' + (result.error?.message ?? String(result.error)));
+			return false;
+		}
 		if (result.status === 0) return true;
 		const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
 		if (details) console.error('\n    ' + details);
