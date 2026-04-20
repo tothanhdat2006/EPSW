@@ -57,10 +57,19 @@ function getLocalDatabaseName() {
 }
 
 function runWranglerD1(args, allowFailure = false) {
-	const result = spawnSync('npx', ['wrangler', 'd1', ...args], {
+	// On Windows, `npx` is a .cmd shim. `spawnSync("npx", ...)` (without a shell)
+	// frequently fails with ENOENT even though it works interactively in PowerShell.
+	const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+	const result = spawnSync(npxBin, ['wrangler', 'd1', ...args], {
 		encoding: 'utf8',
-		stdio: 'pipe'
+		stdio: 'pipe',
+		shell: process.platform === 'win32'
 	});
+
+	if (result.error) {
+		if (allowFailure) return false;
+		throw result.error;
+	}
 
 	if (result.status === 0) return true;
 	if (allowFailure) return false;
