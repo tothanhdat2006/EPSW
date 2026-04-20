@@ -34,7 +34,7 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 
 	const apiKey  = env.LLM_API_KEY  ?? '';
 	const baseUrl = env.LLM_BASE_URL ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
-	const model   = env.LLM_MODEL    ?? 'qwen3.6-plus';
+	const model   = env.LLM_MODEL    ?? 'qwen-plus';
 
 	if (!apiKey) {
 		// Fallback: return first department with a note
@@ -44,8 +44,8 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	const openai = new OpenAI({
 		apiKey,
 		baseURL: baseUrl,
-		timeout: 6000, // fail fast to fallback gracefully
-		maxRetries: 1
+		timeout: 10000, // fail fast to fallback gracefully
+		maxRetries: 5
 	});
 
 	try {
@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 				}
 			],
 			response_format: { type: 'json_object' },
-			max_tokens: 300,
+			max_tokens: 1000,
 		});
 
 		const content = res.choices[0]?.message?.content ?? '{}';
