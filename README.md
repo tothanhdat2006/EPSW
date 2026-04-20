@@ -1,6 +1,6 @@
 # EPSW — Hệ thống Xử lý Hồ sơ Điện tử
 
-**Electronic Public Service Workflow** — Một nền tảng hiện đại cho quy trình dịch vụ công, tích hợp phân tích AI, hệ thống xếp hàng văn bản tự động và giao diện quản lý nội bộ cho cán bộ.
+**Efficient Public Service Workflow** — Một nền tảng hiện đại cho quy trình dịch vụ công, tích hợp phân tích AI, hệ thống xếp hàng văn bản tự động và giao diện quản lý nội bộ cho cán bộ.
 
 ---
 
