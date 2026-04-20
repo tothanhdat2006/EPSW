@@ -54,6 +54,7 @@
 	let submittedCode = $state('');
 	let data = $state<DocumentSummary | null>(null);
 	let isLoading = $state(false);
+	let isRefreshing = $state(false);
 	let isError = $state(false);
 	let errorMessage = $state('');
 
@@ -61,8 +62,10 @@
 
 	// ─── Fetch logic ───────────────────────────────────────────────────────────
 
-	async function fetchStatus(code: string, cccd: string) {
-		isLoading = true;
+	async function fetchStatus(code: string, cccd: string, opts?: { background?: boolean }) {
+		const background = opts?.background ?? false;
+		if (background) isRefreshing = true;
+		else isLoading = true;
 		isError = false;
 		try {
 			const url = `/api/documents/${encodeURIComponent(code)}?cccd=${encodeURIComponent(cccd)}`;
@@ -77,14 +80,17 @@
 			data = await res.json();
 			if (pollingTimer) clearInterval(pollingTimer);
 			if (data?.status === 'RECEIVED' || data?.status === 'PROCESSING') {
-				pollingTimer = setInterval(() => fetchStatus(code, cccd), 5000);
+				pollingTimer = setInterval(() => fetchStatus(code, cccd, { background: true }), 5000);
 			}
 		} catch (e) {
 			isError = true;
 			errorMessage = e instanceof Error ? e.message : 'Mã theo dõi không đúng hoặc hồ sơ chưa được đăng ký.';
-			data = null;
+			// Keep previous `data` during background refresh to avoid UI "reset" flashes.
+			// For an explicit user search, clear result to show the error state.
+			if (!background) data = null;
 		} finally {
 			isLoading = false;
+			isRefreshing = false;
 		}
 	}
 
@@ -92,7 +98,7 @@
 		e.preventDefault();
 		if (!trackingInput.trim() || !cccdInput.trim()) return;
 		submittedCode = trackingInput.trim().toUpperCase();
-		fetchStatus(submittedCode, cccdInput.trim());
+		fetchStatus(submittedCode, cccdInput.trim(), { background: false });
 	}
 
 	$effect(() => () => {
@@ -200,7 +206,7 @@
 	{/if}
 
 	<!-- Result card -->
-	{#if data && !isLoading}
+	{#if data}
 		<div class="glass-card rounded-2xl border overflow-hidden animate-in slide-in-from-bottom-4 duration-500
 			{isRejected ? 'border-destructive/20' : 'border-primary/20'}">
 
@@ -215,10 +221,17 @@
 							Nộp lúc: {format(new Date(data.createdAt), "HH:mm 'ngày' dd/MM/yyyy", { locale: vi })}
 						</p>
 					</div>
-					<span class="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest
-						{DOC_TYPE_COLORS[data.documentType] ?? 'bg-muted/60 text-muted-foreground border-border/30'}">
-						{DOCUMENT_TYPE_LABELS[data.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? data.documentType}
-					</span>
+					<div class="flex items-center gap-2">
+						{#if isRefreshing}
+							<span class="shrink-0 rounded-xl border border-border/30 bg-muted/30 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">
+								Đang cập nhật…
+							</span>
+						{/if}
+						<span class="shrink-0 rounded-xl border px-3 py-1.5 text-xs font-extrabold uppercase tracking-widest
+							{DOC_TYPE_COLORS[data.documentType] ?? 'bg-muted/60 text-muted-foreground border-border/30'}">
+							{DOCUMENT_TYPE_LABELS[data.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? data.documentType}
+						</span>
+					</div>
 				</div>
 			</div>
 
