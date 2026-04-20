@@ -2,32 +2,14 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import OpenAI from 'openai';
-import { getFileBuffer } from '$lib/server/storage';
-import * as mupdf from 'mupdf';
+import {
+	appendDocumentFilesAsVisionContent,
+	parseRawFileUrls,
+	type VisionContentPart
+} from '$lib/server/ai-document';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
-}
-
-/**
- * Render each PDF page to PNG base64 via mupdf WASM (no native deps).
- */
-async function pdfToBase64PngImages(pdfBuffer: Buffer, maxPages = 8): Promise<string[]> {
-	const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf') as mupdf.PDFDocument;
-	const limit = Math.min(doc.countPages(), maxPages);
-	const images: string[] = [];
-	for (let i = 0; i < limit; i++) {
-		const page = doc.loadPage(i);
-		const pixmap = page.toPixmap(
-			mupdf.Matrix.scale(1.5, 1.5),
-			mupdf.ColorSpace.DeviceRGB,
-			false
-		);
-		images.push(Buffer.from(pixmap.asPNG()).toString('base64'));
-		pixmap.destroy();
-	}
-	doc.destroy();
-	return images;
 }
 
 /**
@@ -87,11 +69,7 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 		: '(Chưa có ý kiến luân chuyển trước đó)';
 
 	// ----- Build multimodal content -----
-	type ContentPart =
-		| { type: 'text'; text: string }
-		| { type: 'image_url'; image_url: { url: string } };
-
-	const contentParts: ContentPart[] = [];
+	const contentParts: VisionContentPart[] = [];
 
 	const systemPrompt = `Bạn là Chuyên viên tổng hợp hồ sơ hành chính.
 
@@ -122,28 +100,11 @@ Yêu cầu đầu ra:
 	contentParts.push({ type: 'text', text: reviewContextPrompt });
 
 	// Attach document pages as images
-	const rawFileUrlStr = doc['raw_file_url'] as string | undefined;
-	const rawFileUrls: string[] = rawFileUrlStr ? (rawFileUrlStr.startsWith('[') ? JSON.parse(rawFileUrlStr) : [rawFileUrlStr]) : [];
-	
-	for (const rawFileUrl of rawFileUrls) {
-		const buffer = await getFileBuffer(rawFileUrl, platform);
-		if (buffer) {
-			const ext = rawFileUrl.split('.').pop()?.toLowerCase() || '';
-			if (ext === 'pdf') {
-				try {
-					const pages = await pdfToBase64PngImages(buffer);
-					for (const b64 of pages) {
-						contentParts.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } });
-					}
-				} catch (e: any) {
-					console.warn('[ai-report] PDF render failed:', e.message);
-				}
-			} else {
-				const mimeType = ext === 'webp' ? 'image/webp' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-				contentParts.push({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${buffer.toString('base64')}` } });
-			}
-		}
-	}
+	const rawFileUrls = parseRawFileUrls(doc['raw_file_url'] as string | undefined);
+	await appendDocumentFilesAsVisionContent(contentParts, rawFileUrls, platform, {
+		logPrefix: 'ai-report',
+		maxPdfPages: 8
+	});
 
 	// ----- Call AI -----
 	let rawOutput = '';

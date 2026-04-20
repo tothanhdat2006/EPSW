@@ -2,38 +2,14 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import OpenAI from 'openai';
-import { getFileBuffer } from '$lib/server/storage';
-import * as mupdf from 'mupdf';
+import {
+	appendDocumentFilesAsVisionContent,
+	parseRawFileUrls,
+	type VisionContentPart
+} from '$lib/server/ai-document';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
-}
-
-/**
- * Render each page of a PDF buffer to a PNG and return as base64 strings.
- * Uses mupdf (WASM) — no native canvas addon required.
- */
-async function pdfToBase64PngImages(pdfBuffer: Buffer, maxPages = 10): Promise<string[]> {
-	const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf') as mupdf.PDFDocument;
-	const totalPages = doc.countPages();
-	const limit = Math.min(totalPages, maxPages);
-	console.log(`[ai-summary] PDF has ${totalPages} page(s), processing ${limit}`);
-
-	const images: string[] = [];
-	for (let i = 0; i < limit; i++) {
-		const page = doc.loadPage(i);
-		// 1.5× scale → ~1200×1650 px for A4, good enough for text
-		const pixmap = page.toPixmap(
-			mupdf.Matrix.scale(1.5, 1.5),
-			mupdf.ColorSpace.DeviceRGB,
-			false
-		);
-		const pngBytes = pixmap.asPNG();
-		images.push(Buffer.from(pngBytes).toString('base64'));
-		pixmap.destroy();
-	}
-	doc.destroy();
-	return images;
 }
 
 /**
@@ -62,15 +38,10 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	});
 
 	const model = env.LLM_MODEL || 'qwen-vl-plus';
-	const rawFileUrlStr = doc['raw_file_url'] as string | undefined;
-	const rawFileUrls: string[] = rawFileUrlStr ? (rawFileUrlStr.startsWith('[') ? JSON.parse(rawFileUrlStr) : [rawFileUrlStr]) : [];
+	const rawFileUrls = parseRawFileUrls(doc['raw_file_url'] as string | undefined);
 
 	// Build the multimodal content array (text prompt + one image per page)
-	type ContentPart =
-		| { type: 'text'; text: string }
-		| { type: 'image_url'; image_url: { url: string } };
-
-	const contentParts: ContentPart[] = [];
+	const contentParts: VisionContentPart[] = [];
 
 	const summaryPrompt = `Bạn là Chuyên viên phân tích hồ sơ hành chính.
 Hãy đọc toàn bộ nội dung các trang tài liệu được đính kèm và viết một "Tờ trình Liên ngành" tóm tắt hồ sơ này trong đúng 3-4 dòng ngắn gọn, súc tích để trình Lãnh đạo xem xét.
@@ -79,46 +50,21 @@ QUAN TRỌNG: TUYỆT ĐỐI CHỈ SỬ DỤNG thông tin có trong tài liệu 
 
 	contentParts.push({ type: 'text', text: summaryPrompt });
 
-	for (const url of rawFileUrls) {
-		const buffer = await getFileBuffer(url, platform);
-		if (buffer) {
-			const ext = url.split('.').pop()?.toLowerCase() || '';
-
-			if (ext === 'pdf') {
-				// --- PDF: render each page to PNG via mupdf WASM ---
-				console.log(`[ai-summary] Rendering PDF pages via mupdf: ${url}`);
-				try {
-					const pageImages = await pdfToBase64PngImages(buffer);
-					for (const b64 of pageImages) {
-						contentParts.push({
-							type: 'image_url',
-							image_url: { url: `data:image/png;base64,${b64}` }
-						});
-					}
-				} catch (pdfErr: any) {
-					console.error('[ai-summary] mupdf rendering failed:', pdfErr.message);
-					// Fall through — model will still see the text prompt
-				}
-			} else {
-				// --- Image file: send directly ---
-				const mimeType =
-					ext === 'webp' ? 'image/webp' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-				const b64 = buffer.toString('base64');
-				contentParts.push({
-					type: 'image_url',
-					image_url: { url: `data:${mimeType};base64,${b64}` }
-				});
-			}
-		} else {
-			console.warn(`[ai-summary] Could not retrieve file buffer for ${url}`);
-		}
-	}
+	await appendDocumentFilesAsVisionContent(contentParts, rawFileUrls, platform, {
+		logPrefix: 'ai-summary',
+		maxPdfPages: 10
+	});
 
 	// If no images were added (e.g. file retrieval failed), add existing extracted data as context
 	if (contentParts.length === 1 && doc['extracted_data']) {
+		let parsedExtractedData: unknown = doc['extracted_data'];
+		try {
+			parsedExtractedData = JSON.parse(doc['extracted_data'] as string);
+		} catch {}
+
 		contentParts.push({
 			type: 'text',
-			text: `Dữ liệu đã trích xuất trước đó:\n${JSON.stringify(doc['extracted_data'])}`
+			text: `Dữ liệu đã trích xuất trước đó:\n${JSON.stringify(parsedExtractedData, null, 2)}`
 		});
 	}
 

@@ -3,8 +3,8 @@ import type { RequestHandler } from './$types';
 import { VALID_DEPARTMENTS, DEPARTMENT_LABELS, type Department } from '$lib/api/types';
 import { emailService } from '$lib/server/email-service';
 import { env } from '$env/dynamic/private';
-import { getFileBuffer } from '$lib/server/storage';
 import OpenAI from 'openai';
+import { appendDocumentFilesAsVisionContent, parseRawFileUrls } from '$lib/server/ai-document';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
@@ -111,35 +111,41 @@ async function generateAISummaryJob(docId: string, db: D1Database, platform: App
 		console.error('[AI Job] Could not fetch document metadata', e);
 	}
 
-	const rawFileUrls: string[] = rawFileUrlStr ? (rawFileUrlStr.startsWith('[') ? JSON.parse(rawFileUrlStr) : [rawFileUrlStr]) : [];
+	const rawFileUrls = parseRawFileUrls(rawFileUrlStr);
 	let aggregatedOcrText = '';
 
 	// --- STEP 1: OCR / Text Extraction ---
-	for (const rawFileUrl of rawFileUrls) {
-		const buffer = await getFileBuffer(rawFileUrl, platform);
-		if (buffer) {
-			const ext = rawFileUrl.split('.').pop()?.toLowerCase() || '';
-			
-			const mimeType = ext === 'pdf' ? 'application/pdf' : (ext === 'webp' ? 'image/webp' : `image/${ext === 'jpg' ? 'jpeg' : ext}`);
-			const base64 = buffer.toString('base64');
-			const dataUri = `data:${mimeType};base64,${base64}`;
+	if (rawFileUrls.length > 0) {
+		const ocrContentParts: Array<
+			| { type: 'text'; text: string }
+			| { type: 'image_url'; image_url: { url: string } }
+		> = [
+			{
+				type: 'text',
+				text:
+					'Hãy trích xuất toàn bộ nội dung chữ có trong tất cả các trang/tệp đính kèm theo đúng thứ tự xuất hiện. Không bỏ sót, không diễn giải, không tóm tắt.'
+			}
+		];
 
+		await appendDocumentFilesAsVisionContent(ocrContentParts, rawFileUrls, platform, {
+			logPrefix: 'assign-ocr',
+			maxPdfPages: 10
+		});
+
+		if (ocrContentParts.length > 1) {
 			try {
 				const ocrResponse = await openai.chat.completions.create({
 					model: 'qwen-vl-ocr-2025-11-20',
 					messages: [
 						{
 							role: 'user',
-							content: [
-								{ type: 'text', text: 'Hãy trích xuất toàn bộ nội dung văn bản trong tài liệu này một cách chính xác nhất.' },
-								{ type: 'image_url', image_url: { url: dataUri } }
-							]
+							content: ocrContentParts
 						}
 					]
 				});
-				aggregatedOcrText += (ocrResponse.choices[0]?.message?.content?.trim() || '') + '\n\n';
+				aggregatedOcrText = ocrResponse.choices[0]?.message?.content?.trim() || '';
 			} catch (ocrErr: any) {
-				console.error('[AI Job] OCR failed, skipping file', ocrErr.message);
+				console.error('[AI Job] OCR failed for uploaded files', ocrErr.message);
 			}
 		}
 	}
