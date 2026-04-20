@@ -1,9 +1,28 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { VALID_DOCUMENT_TYPES, type DocumentType } from '$lib/api/types';
+import { pdfToBase64PngImages } from '$lib/server/ai-document';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
+}
+
+async function saveUpload(
+	filename: string,
+	contentType: string,
+	buffer: Buffer,
+	storage: R2Bucket | undefined
+) {
+	if (storage) {
+		await storage.put(filename, buffer, {
+			httpMetadata: { contentType }
+		});
+		return;
+	}
+
+	const { writeFileSync, mkdirSync } = await import('node:fs');
+	mkdirSync('static/uploads', { recursive: true });
+	writeFileSync(`static/uploads/${filename}`, buffer);
 }
 
 // POST /api/documents — submit a new document
@@ -35,25 +54,23 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	for (const item of files) {
 		if (!(item instanceof File) || item.size === 0) continue;
 		const file = item as File;
-		
-		const fileId = crypto.randomUUID();
-		const originalName = file.name || 'document';
-		const ext = originalName.includes('.') ? `.${originalName.split('.').pop()}` : '';
-		const filename = `${fileId}${ext}`;
-		
-		rawFileUrls.push(`/uploads/${filename}`);
 
 		try {
-			const buffer = await file.arrayBuffer();
-			if (storage) {
-				await storage.put(filename, buffer, {
-					httpMetadata: { contentType: file.type || 'application/octet-stream' }
-				});
+			const buffer = Buffer.from(await file.arrayBuffer());
+			const originalName = file.name || 'document';
+			const ext = originalName.split('.').pop()?.toLowerCase() || '';
+
+			if (ext === 'pdf' || file.type === 'application/pdf') {
+				const pageImages = await pdfToBase64PngImages(buffer, 50);
+				for (const [pageIndex, b64] of pageImages.entries()) {
+					const filename = `${crypto.randomUUID()}-page-${pageIndex + 1}.png`;
+					rawFileUrls.push(`/uploads/${filename}`);
+					await saveUpload(filename, 'image/png', Buffer.from(b64, 'base64'), storage);
+				}
 			} else {
-				// Only works in Node.js dev environments! Safe fallback for cloud runtimes.
-				const { writeFileSync, mkdirSync } = await import('node:fs');
-				mkdirSync('static/uploads', { recursive: true });
-				writeFileSync(`static/uploads/${filename}`, Buffer.from(buffer));
+				const filename = `${crypto.randomUUID()}.${ext || 'bin'}`;
+				rawFileUrls.push(`/uploads/${filename}`);
+				await saveUpload(filename, file.type || 'application/octet-stream', buffer, storage);
 			}
 		} catch (e) {
 			console.warn('Could not save file to disk or R2:', e);

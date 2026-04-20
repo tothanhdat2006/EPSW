@@ -5,6 +5,17 @@ export type VisionContentPart =
 	| { type: 'text'; text: string }
 	| { type: 'image_url'; image_url: { url: string } };
 
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	webp: 'image/webp',
+	gif: 'image/gif',
+	bmp: 'image/bmp',
+	tif: 'image/tiff',
+	tiff: 'image/tiff'
+};
+
 export function parseRawFileUrls(rawFileUrl: string | null | undefined): string[] {
 	if (!rawFileUrl) return [];
 
@@ -90,10 +101,13 @@ export async function appendDocumentFilesAsVisionContent(
 				console.warn(`[${logPrefix}] PDF render failed for ${filename}: ${message}`);
 			}
 		} else {
-			const mimeType =
-				ext === 'webp'
-					? 'image/webp'
-					: `image/${ext === 'jpg' ? 'jpeg' : ext || 'png'}`;
+			const mimeType = IMAGE_MIME_BY_EXTENSION[ext];
+			if (!mimeType) {
+				console.warn(
+					`[${logPrefix}] Skipping unsupported non-image file for AI upload: ${filename}`
+				);
+				continue;
+			}
 
 			contentParts.push({
 				type: 'image_url',
