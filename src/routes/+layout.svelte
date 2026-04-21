@@ -6,7 +6,9 @@
 	import { Upload, Search, ShieldCheck } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { currentMessages, initializeLocale } from '$lib/i18n';
+	import { initializeTheme } from '$lib/theme';
 
 	let { children } = $props();
 
@@ -19,6 +21,7 @@
 	];
 
 	onMount(() => {
+		initializeTheme();
 		initializeLocale();
 	});
 </script>
@@ -69,6 +72,8 @@
 							</a>
 						{/each}
 					</nav>
+
+					<ThemeToggle />
 
 					<LocaleSwitcher />
 

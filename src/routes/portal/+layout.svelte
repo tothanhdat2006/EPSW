@@ -16,6 +16,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { authClient } from '$lib/auth-client';
 	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { currentMessages, locale } from '$lib/i18n';
 	import {
 		getRoleLabel,
@@ -179,6 +180,8 @@
 			</nav>
 
 			<div class="space-y-3 border-t border-border/50 p-4">
+				<ThemeToggle />
+
 				<LocaleSwitcher />
 
 				<!-- User info with role badge -->
