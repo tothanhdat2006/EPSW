@@ -24,72 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const USERS = [
-	// ── Admins ──────────────────────────────────────────────────────────────
-	{
-		email: 'admin@dvc.gov.vn',
-		name: 'Quản trị viên DVC',
-		password: 'Admin@DVC2025!',
-		role: 'admin',
-		department: null,
-	},
-
-	// ── Bộ phận Một cửa (intake) — no department ────────────────────────────
-	{
-		email: 'motcua@dvc.gov.vn',
-		name: 'Bộ phận Một cửa',
-		password: 'Admin@DVC2025!',
-		role: 'mot_cua',
-		department: null,
-	},
-
-	// ── Chuyên viên — one per department ────────────────────────────────────
-	{
-		email: 'cv.tnmt@dvc.gov.vn',
-		name: 'Chuyên viên Sở TN&MT',
-		password: 'Admin@DVC2025!',
-		role: 'chuyen_vien',
-		department: 'SO_TAI_NGUYEN_MOI_TRUONG',
-	},
-	{
-		email: 'cv.khdt@dvc.gov.vn',
-		name: 'Chuyên viên Sở KH&ĐT',
-		password: 'Admin@DVC2025!',
-		role: 'chuyen_vien',
-		department: 'SO_KE_HOACH_DAU_TU',
-	},
-	{
-		email: 'cv.ubnd@dvc.gov.vn',
-		name: 'Chuyên viên UBND Tỉnh',
-		password: 'Admin@DVC2025!',
-		role: 'chuyen_vien',
-		department: 'UBND_TINH',
-	},
-
-	// ── Lãnh đạo — one per department ───────────────────────────────────────
-	{
-		email: 'ld.tnmt@dvc.gov.vn',
-		name: 'Lãnh đạo Sở TN&MT',
-		password: 'Admin@DVC2025!',
-		role: 'lanh_dao',
-		department: 'SO_TAI_NGUYEN_MOI_TRUONG',
-	},
-	{
-		email: 'ld.khdt@dvc.gov.vn',
-		name: 'Lãnh đạo Sở KH&ĐT',
-		password: 'Admin@DVC2025!',
-		role: 'lanh_dao',
-		department: 'SO_KE_HOACH_DAU_TU',
-	},
-	{
-		email: 'ld.ubnd@dvc.gov.vn',
-		name: 'Lãnh đạo UBND Tỉnh',
-		password: 'Admin@DVC2025!',
-		role: 'lanh_dao',
-		department: 'UBND_TINH',
-	},
-];
+import { SEED_TEST_ACCOUNTS as USERS } from '../src/lib/constants/seed-test-accounts';
 
 const WRANGLER_CONFIG_FILE = 'wrangler.jsonc';
 const DEFAULT_LOCAL_D1_NAME = 'epsw-db';
@@ -129,7 +64,11 @@ function runLocalD1Command(databaseName: string, sql: string) {
 		if (details) console.error('\n    ' + details);
 		return false;
 	} finally {
-		try { unlinkSync(tmpFile); } catch { /* ignore */ }
+		try {
+			unlinkSync(tmpFile);
+		} catch {
+			/* ignore */
+		}
 	}
 }
 
@@ -144,7 +83,7 @@ async function seedUsers() {
 			const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Origin: baseUrl },
-				body: JSON.stringify({ email: u.email, password: u.password, name: u.name }),
+				body: JSON.stringify({ email: u.email, password: u.password, name: u.name })
 			});
 
 			const data = (await res.json()) as { error?: { message?: string } };
@@ -168,7 +107,9 @@ async function seedUsers() {
 		const deptVal = u.department ? sqlString(u.department) : 'NULL';
 		const sql = `UPDATE user SET role = ${sqlString(u.role)}, department = ${deptVal} WHERE email = ${sqlString(u.email)}`;
 
-		process.stdout.write(`  Patching ${u.email} → role=${u.role}, dept=${u.department ?? 'none'}... `);
+		process.stdout.write(
+			`  Patching ${u.email} → role=${u.role}, dept=${u.department ?? 'none'}... `
+		);
 		if (runLocalD1Command(localDbName, sql)) {
 			console.log('✅');
 		} else {

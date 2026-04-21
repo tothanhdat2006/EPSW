@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { emailService } from '$lib/server/email-service';
 import { env } from '$env/dynamic/private';
 import OpenAI from 'openai';
+import type { UILocale } from '$lib/i18n';
+import { getAiOutputInstruction, getRequestLocale } from '$lib/i18n';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
@@ -12,7 +14,8 @@ type LeadershipDecision = 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
 
 async function generateLeadershipFeedbackWithAI(
 	decision: LeadershipDecision,
-	extractedData: Record<string, unknown>
+	extractedData: Record<string, unknown>,
+	locale: UILocale
 ): Promise<string | null> {
 	if (!env.LLM_API_KEY) return null;
 
@@ -23,13 +26,15 @@ async function generateLeadershipFeedbackWithAI(
 
 	const model = env.LLM_MODEL || 'qwen-plus';
 	const aiSummary = typeof extractedData.ai_summary === 'string' ? extractedData.ai_summary : '';
-	const officerBrief = typeof extractedData.ai_officer_brief === 'string' ? extractedData.ai_officer_brief : '';
+	const officerBrief =
+		typeof extractedData.ai_officer_brief === 'string' ? extractedData.ai_officer_brief : '';
 	const officerFeedbacks = Array.isArray(extractedData.officerFeedback)
-		? extractedData.officerFeedback as Array<Record<string, unknown>>
+		? (extractedData.officerFeedback as Array<Record<string, unknown>>)
 		: [];
-	const latestOfficerFeedback = officerFeedbacks.length > 0
-		? String(officerFeedbacks[officerFeedbacks.length - 1]?.feedback ?? '')
-		: '';
+	const latestOfficerFeedback =
+		officerFeedbacks.length > 0
+			? String(officerFeedbacks[officerFeedbacks.length - 1]?.feedback ?? '')
+			: '';
 
 	const instructionByDecision: Record<LeadershipDecision, string> = {
 		APPROVED: 'Soạn 1 câu đồng ý phê duyệt ngắn gọn, dứt khoát.',
@@ -43,7 +48,8 @@ Yêu cầu:
 - Bắt đầu thẳng vào ý chính, không chào hỏi.
 - Dùng tiếng Việt hành chính dễ hiểu, dứt khoát, đúng mực.
 - Không dùng markdown, không gạch đầu dòng.
-- Chỉ trả về đúng nội dung chỉ đạo, không thêm giải thích ngoài lề.`;
+- Chỉ trả về đúng nội dung chỉ đạo, không thêm giải thích ngoài lề.
+- ${getAiOutputInstruction(locale)}`;
 
 	const userPrompt = `Thông tin hồ sơ:
 - Tóm tắt AI: ${aiSummary || '(không có)'}
@@ -72,26 +78,35 @@ Nhiệm vụ: ${instructionByDecision[decision]}`;
 	}
 }
 
-export const POST: RequestHandler = async ({ params, request, platform, locals }) => {
+export const POST: RequestHandler = async ({ params, request, platform, locals, cookies }) => {
 	const db = getDB(platform);
 	if (!db) return error(503, 'Database unavailable');
 	if (!locals.user) return error(401, 'Unauthorized');
 
 	const { role, name } = locals.user as { role: string; name: string };
+	const locale = getRequestLocale(request.headers) || getRequestLocale(cookies);
 	if (role !== 'lanh_dao' && role !== 'admin') {
 		return error(403, 'Chỉ Lãnh đạo mới có quyền phê duyệt hồ sơ.');
 	}
 
 	const { id } = params;
-	const body = await request.json() as { decision?: string; feedback?: string; autoGenerateFeedback?: boolean };
+	const body = (await request.json()) as {
+		decision?: string;
+		feedback?: string;
+		autoGenerateFeedback?: boolean;
+	};
 	const rawDecision = body.decision ?? 'APPROVED';
 	// Lãnh đạo can decide APPROVED, REJECTED, or REVISION_REQUESTED
-	const decision: LeadershipDecision = (rawDecision === 'REJECTED' || rawDecision === 'REVISION_REQUESTED') ? rawDecision : 'APPROVED';
+	const decision: LeadershipDecision =
+		rawDecision === 'REJECTED' || rawDecision === 'REVISION_REQUESTED' ? rawDecision : 'APPROVED';
 	let feedback = body.feedback ?? '';
 
-	const doc = await db.prepare(
-		`SELECT status, extracted_data, tracking_code, citizen_email FROM document WHERE id = ? LIMIT 1`
-	).bind(id).first<Record<string, unknown>>();
+	const doc = await db
+		.prepare(
+			`SELECT status, extracted_data, tracking_code, citizen_email FROM document WHERE id = ? LIMIT 1`
+		)
+		.bind(id)
+		.first<Record<string, unknown>>();
 
 	if (!doc) return error(404, 'Không tìm thấy hồ sơ.');
 
@@ -103,13 +118,15 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 
 	let extractedData: Record<string, any> = {};
 	if (doc.extracted_data) {
-		try { extractedData = JSON.parse(doc.extracted_data as string); } catch(e){}
+		try {
+			extractedData = JSON.parse(doc.extracted_data as string);
+		} catch (e) {}
 	}
 
 	let feedbackGeneratedByAI = false;
 	const shouldAutoGenerateFeedback = body.autoGenerateFeedback === true || !feedback.trim();
 	if (shouldAutoGenerateFeedback) {
-		const aiFeedback = await generateLeadershipFeedbackWithAI(decision, extractedData);
+		const aiFeedback = await generateLeadershipFeedbackWithAI(decision, extractedData, locale);
 		if (aiFeedback) {
 			feedback = aiFeedback;
 			feedbackGeneratedByAI = true;
@@ -130,20 +147,32 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 		timestamp: now
 	});
 
-	await db.prepare(
-		`UPDATE document SET status = ?, extracted_data = ?, updated_at = ? WHERE id = ?`
-	).bind(decision, JSON.stringify(extractedData), now, id).run();
+	await db
+		.prepare(`UPDATE document SET status = ?, extracted_data = ?, updated_at = ? WHERE id = ?`)
+		.bind(decision, JSON.stringify(extractedData), now, id)
+		.run();
 
 	// Log audit
-	await db.prepare(
-		`INSERT INTO audit_log (id, document_id, action, actor_id, actor_role, correlation_id, metadata, created_at)
+	await db
+		.prepare(
+			`INSERT INTO audit_log (id, document_id, action, actor_id, actor_role, correlation_id, metadata, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	).bind(
-		crypto.randomUUID(), id, decision === 'APPROVED' ? 'APPROVED' : (decision === 'REJECTED' ? 'REJECTED' : 'RETURNED_FOR_REVISION'), locals.user.id, role,
-		crypto.randomUUID(),
-		JSON.stringify({ decision, feedback, generatedByAI: feedbackGeneratedByAI }),
-		now
-	).run();
+		)
+		.bind(
+			crypto.randomUUID(),
+			id,
+			decision === 'APPROVED'
+				? 'APPROVED'
+				: decision === 'REJECTED'
+					? 'REJECTED'
+					: 'RETURNED_FOR_REVISION',
+			locals.user.id,
+			role,
+			crypto.randomUUID(),
+			JSON.stringify({ decision, feedback, generatedByAI: feedbackGeneratedByAI }),
+			now
+		)
+		.run();
 
 	// Email notifications
 	const citizenEmail = doc['citizen_email'] as string | null;
@@ -153,7 +182,12 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 			if (decision === 'APPROVED') {
 				await emailService.notifyDocumentApproved(citizenEmail, 'Quý công dân', trackingCode);
 			} else {
-				await emailService.notifyDocumentRejected(citizenEmail, 'Quý công dân', trackingCode, feedback || 'Hồ sơ không đạt yêu cầu.');
+				await emailService.notifyDocumentRejected(
+					citizenEmail,
+					'Quý công dân',
+					trackingCode,
+					feedback || 'Hồ sơ không đạt yêu cầu.'
+				);
 			}
 		} catch (e) {
 			console.error('[approve] Failed to send email:', e);

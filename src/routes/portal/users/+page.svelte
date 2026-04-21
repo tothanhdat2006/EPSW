@@ -6,17 +6,37 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import {
-		Card, CardContent, CardDescription, CardHeader, CardTitle
+		Card,
+		CardContent,
+		CardDescription,
+		CardHeader,
+		CardTitle
 	} from '$lib/components/ui/card/index.js';
 	import {
-		UserPlus, Search, ShieldCheck, Mail, Calendar,
-		UserRound, Loader2, X, Lock, Building2, Inbox, ChevronDown, Pencil
+		UserPlus,
+		Search,
+		ShieldCheck,
+		Mail,
+		Calendar,
+		UserRound,
+		Loader2,
+		X,
+		Lock,
+		Building2,
+		Inbox,
+		ChevronDown,
+		Pencil
 	} from 'lucide-svelte';
 	import { format } from 'date-fns';
-	import { vi } from 'date-fns/locale';
+	import { getDateLocale, locale } from '$lib/i18n';
 	import {
-		ROLE_LABELS, DEPARTMENT_LABELS, VALID_ROLES, VALID_DEPARTMENTS,
-		ROLES_WITH_DEPARTMENT, type StaffRole, type Department
+		ROLE_LABELS,
+		DEPARTMENT_LABELS,
+		VALID_ROLES,
+		VALID_DEPARTMENTS,
+		ROLES_WITH_DEPARTMENT,
+		type StaffRole,
+		type Department
 	} from '$lib/api/types';
 
 	// ─── State ─────────────────────────────────────────────────────────────────
@@ -44,7 +64,77 @@
 	let isUpdatingRole = $state(false);
 	let updateError = $state<string | null>(null);
 
-	let editNeedsDept = $derived(editingUser ? ROLES_WITH_DEPARTMENT.includes(editingUser.role) : false);
+	let editNeedsDept = $derived(
+		editingUser ? ROLES_WITH_DEPARTMENT.includes(editingUser.role) : false
+	);
+
+	const ui = $derived(
+		$locale === 'en'
+			? {
+					pageTitle: 'Staff Directory',
+					pageSubtitle: 'Manage accounts and workflow permissions by role',
+					addStaff: 'Add new staff',
+					accountCatalog: 'Account catalog',
+					searchPlaceholder: 'Search by name or email...',
+					loading: 'Loading staff list...',
+					empty: 'No staff found',
+					name: 'Full Name',
+					role: 'Role',
+					department: 'Department',
+					createdAt: 'Created at',
+					actions: 'Actions',
+					createTitle: 'Create New Staff Account',
+					createDescription: 'Issue a new identity for a staff member in the DVC workflow system.',
+					emailLabel: 'Email Address',
+					initialPassword: 'Initial Password',
+					selectDepartment: 'Select Department',
+					cancel: 'Cancel',
+					creating: 'Creating...',
+					confirmProvision: 'Confirm Provisioning',
+					editTitle: 'Update Role',
+					editPrefix: 'Change workflow permissions for',
+					newRole: 'New Role',
+					selectDepartmentPlaceholder: 'Select a responsible department...',
+					processing: 'Processing...',
+					update: 'Update',
+					deptRequiredError: 'Please select a responsible department.',
+					systemError: 'A system error occurred.',
+					unknownCreateError: 'Unknown error while creating the account',
+					retryError: 'A system error occurred. Please try again later.'
+				}
+			: {
+					pageTitle: 'Đội ngũ Cán bộ',
+					pageSubtitle: 'Quản lý tài khoản và phân quyền nghiệp vụ theo vai trò',
+					addStaff: 'Thêm cán bộ mới',
+					accountCatalog: 'Danh mục tài khoản',
+					searchPlaceholder: 'Tìm theo tên hoặc email...',
+					loading: 'Đang tải danh sách cán bộ...',
+					empty: 'Không tìm thấy cán bộ',
+					name: 'Họ và Tên',
+					role: 'Vai trò',
+					department: 'Đơn vị',
+					createdAt: 'Ngày tạo',
+					actions: 'Thao tác',
+					createTitle: 'Khởi tạo Cán bộ mới',
+					createDescription: 'Cấp phát định danh mới cho cán bộ vào hệ thống nghiệp vụ DVC.',
+					emailLabel: 'Địa chỉ Email',
+					initialPassword: 'Mật khẩu khởi tạo',
+					selectDepartment: 'Chọn đơn vị',
+					cancel: 'Hủy bỏ',
+					creating: 'Đang khởi tạo...',
+					confirmProvision: 'Xác nhận cấp phát',
+					editTitle: 'Cập nhật Vai trò',
+					editPrefix: 'Thay đổi phân quyền nghiệp vụ cho',
+					newRole: 'Vai trò mới',
+					selectDepartmentPlaceholder: 'Chọn đơn vị phụ trách...',
+					processing: 'Xử lý...',
+					update: 'Cập nhật',
+					deptRequiredError: 'Vui lòng chọn đơn vị phụ trách.',
+					systemError: 'Đã xảy ra lỗi hệ thống.',
+					unknownCreateError: 'Lỗi không xác định khi tạo tài khoản',
+					retryError: 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
+				}
+	);
 
 	function openEditModal(user: any) {
 		editingUser = { ...user };
@@ -55,9 +145,9 @@
 	async function handleUpdateRole(e: SubmitEvent) {
 		e.preventDefault();
 		if (!editingUser) return;
-		
+
 		if (editNeedsDept && !editingUser.department) {
-			updateError = 'Vui lòng chọn đơn vị phụ trách.';
+			updateError = ui.deptRequiredError;
 			return;
 		}
 
@@ -85,7 +175,7 @@
 			showEditModal = false;
 			await loadUsers();
 		} catch (e: any) {
-			updateError = e.message || 'Đã xảy ra lỗi hệ thống.';
+			updateError = e.message || ui.systemError;
 		} finally {
 			isUpdatingRole = false;
 		}
@@ -108,7 +198,7 @@
 	async function handleCreateUser(e: SubmitEvent) {
 		e.preventDefault();
 		if (needsDept && !newUser.department) {
-			createError = 'Vui lòng chọn đơn vị phụ trách.';
+			createError = ui.deptRequiredError;
 			return;
 		}
 		isCreating = true;
@@ -124,23 +214,25 @@
 				}
 			});
 			if (error) {
-				createError = error.message || 'Lỗi không xác định khi tạo tài khoản';
+				createError = error.message || ui.unknownCreateError;
 				return;
 			}
 			showCreateModal = false;
 			newUser = { name: '', email: '', password: '', role: 'mot_cua', department: '' };
 			await loadUsers();
 		} catch (e) {
-			createError = 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.';
+			createError = ui.retryError;
 		} finally {
 			isCreating = false;
 		}
 	}
 
-	onMount(() => { loadUsers(); });
+	onMount(() => {
+		loadUsers();
+	});
 
 	const filteredUsers = $derived(
-		users.filter(u => {
+		users.filter((u) => {
 			const matchSearch =
 				u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				u.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -151,119 +243,139 @@
 
 	function getRoleBadgeClass(role: string) {
 		const map: Record<string, string> = {
-			admin:       'bg-violet-500/10 text-violet-400 border border-violet-500/20',
-			mot_cua:     'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+			admin: 'bg-violet-500/10 text-violet-400 border border-violet-500/20',
+			mot_cua: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
 			chuyen_vien: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-			lanh_dao:    'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+			lanh_dao: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
 		};
 		return map[role] ?? 'bg-muted/20 text-muted-foreground border border-border/30';
 	}
 </script>
 
 <svelte:head>
-	<title>Quản lý nhân sự — DVC Portal</title>
+	<title>{ui.pageTitle} — DVC Portal</title>
 </svelte:head>
 
 <div class="relative min-h-full p-8">
 	<!-- Header -->
-	<div class="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+	<div class="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
 		<div>
-			<h1 class="text-3xl font-extrabold tracking-tight text-foreground">Đội ngũ Cán bộ</h1>
-			<p class="mt-2 text-muted-foreground font-medium">Quản lý tài khoản và phân quyền nghiệp vụ theo vai trò</p>
+			<h1 class="text-3xl font-extrabold tracking-tight text-foreground">{ui.pageTitle}</h1>
+			<p class="mt-2 font-medium text-muted-foreground">{ui.pageSubtitle}</p>
 		</div>
 		<Button
 			onclick={() => (showCreateModal = true)}
-			class="h-12 px-6 rounded-2xl bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(var(--primary),0.3)] transition-all group shrink-0"
+			class="group h-12 shrink-0 rounded-2xl bg-primary px-6 text-primary-foreground transition-all hover:shadow-[0_0_20px_rgba(var(--primary),0.3)]"
 		>
-			<UserPlus size={18} class="mr-2 group-hover:scale-110 transition-transform" />
-			Thêm cán bộ mới
+			<UserPlus size={18} class="mr-2 transition-transform group-hover:scale-110" />
+			{ui.addStaff}
 		</Button>
 	</div>
 
 	<!-- Role stats -->
-	<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+	<div class="mb-10 grid grid-cols-2 gap-4 md:grid-cols-4">
 		{#each VALID_ROLES as role}
 			<button
-				onclick={() => filterRole = filterRole === role ? '' : role}
+				onclick={() => (filterRole = filterRole === role ? '' : role)}
 				class="rounded-2xl border p-4 text-left transition-all
-					{filterRole === role ? 'border-primary bg-primary/5' : 'border-border/40 bg-muted/10 hover:border-border/60'}"
+					{filterRole === role
+					? 'border-primary bg-primary/5'
+					: 'border-border/40 bg-muted/10 hover:border-border/60'}"
 			>
-				<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{ROLE_LABELS[role]}</p>
-				<p class="text-2xl font-black text-foreground mt-1">{users.filter(u => u.role === role).length}</p>
+				<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+					{ROLE_LABELS[role]}
+				</p>
+				<p class="mt-1 text-2xl font-black text-foreground">
+					{users.filter((u) => u.role === role).length}
+				</p>
 			</button>
 		{/each}
 	</div>
 
 	<!-- User table -->
-	<Card class="bg-muted/5 border-border/40 backdrop-blur-md overflow-hidden rounded-3xl shadow-2xl">
+	<Card class="overflow-hidden rounded-3xl border-border/40 bg-muted/5 shadow-2xl backdrop-blur-md">
 		<CardHeader class="border-b border-border/40 bg-muted/10 px-6 py-5">
-			<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-				<CardTitle class="text-lg font-bold flex items-center">
+			<div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+				<CardTitle class="flex items-center text-lg font-bold">
 					<ShieldCheck size={20} class="mr-2 text-primary" />
-					Danh mục tài khoản {filterRole ? `— ${ROLE_LABELS[filterRole as StaffRole]}` : ''}
+					{ui.accountCatalog}
+					{filterRole ? `— ${ROLE_LABELS[filterRole as StaffRole]}` : ''}
 				</CardTitle>
-				<div class="relative w-full md:w-80 group">
-					<Search size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+				<div class="group relative w-full md:w-80">
+					<Search
+						size={16}
+						class="absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary"
+					/>
 					<Input
 						type="text"
-						placeholder="Tìm theo tên hoặc email..."
+						placeholder={ui.searchPlaceholder}
 						bind:value={searchQuery}
-						class="pl-10 h-10 bg-background/50 border-border/50 rounded-xl"
+						class="h-10 rounded-xl border-border/50 bg-background/50 pl-10"
 					/>
 				</div>
 			</div>
 		</CardHeader>
 		<CardContent class="p-0">
 			{#if isLoading}
-				<div class="flex flex-col items-center justify-center py-20 gap-4">
+				<div class="flex flex-col items-center justify-center gap-4 py-20">
 					<Loader2 size={40} class="animate-spin text-primary/50" />
-					<p class="text-muted-foreground font-medium animate-pulse">Đang tải danh sách cán bộ...</p>
+					<p class="animate-pulse font-medium text-muted-foreground">{ui.loading}</p>
 				</div>
 			{:else if filteredUsers.length === 0}
 				<div class="flex flex-col items-center justify-center py-20 text-center">
-					<div class="mb-4 rounded-full bg-muted/20 p-6 border border-dashed border-border/40">
+					<div class="mb-4 rounded-full border border-dashed border-border/40 bg-muted/20 p-6">
 						<UserRound size={40} class="text-muted-foreground/30" />
 					</div>
-					<h3 class="text-lg font-bold text-foreground">Không tìm thấy cán bộ</h3>
+					<h3 class="text-lg font-bold text-foreground">{ui.empty}</h3>
 				</div>
 			{:else}
 				<div class="overflow-x-auto">
-					<table class="w-full text-left border-collapse">
+					<table class="w-full border-collapse text-left">
 						<thead>
-							<tr class="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60 border-b border-border/40 bg-muted/5">
-								<th class="px-6 py-4">Họ và Tên</th>
+							<tr
+								class="border-b border-border/40 bg-muted/5 text-[11px] font-bold tracking-[0.15em] text-muted-foreground/60 uppercase"
+							>
+								<th class="px-6 py-4">{ui.name}</th>
 								<th class="px-6 py-4">Email</th>
-								<th class="px-6 py-4">Vai trò</th>
-								<th class="px-6 py-4">Đơn vị</th>
-								<th class="px-6 py-4">Ngày tạo</th>
-								<th class="px-6 py-4 text-right">Thao tác</th>
+								<th class="px-6 py-4">{ui.role}</th>
+								<th class="px-6 py-4">{ui.department}</th>
+								<th class="px-6 py-4">{ui.createdAt}</th>
+								<th class="px-6 py-4 text-right">{ui.actions}</th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-border/20">
 							{#each filteredUsers as user}
-								<tr class="hover:bg-primary/5 transition-colors group/row">
+								<tr class="group/row transition-colors hover:bg-primary/5">
 									<td class="px-6 py-4">
 										<div class="flex items-center gap-3">
-											<div class="h-10 w-10 rounded-xl bg-linear-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center text-primary font-bold shadow-sm group-hover/row:scale-105 transition-transform">
+											<div
+												class="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-linear-to-br from-primary/20 to-primary/5 font-bold text-primary shadow-sm transition-transform group-hover/row:scale-105"
+											>
 												{user.name?.charAt(0).toUpperCase() || 'U'}
 											</div>
-											<span class="font-bold text-foreground tracking-tight">{user.name}</span>
+											<span class="font-bold tracking-tight text-foreground">{user.name}</span>
 										</div>
 									</td>
 									<td class="px-6 py-4">
-										<div class="flex items-center gap-2 text-muted-foreground font-medium">
+										<div class="flex items-center gap-2 font-medium text-muted-foreground">
 											<Mail size={14} class="opacity-50" />
 											{user.email}
 										</div>
 									</td>
 									<td class="px-6 py-4">
-										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold {getRoleBadgeClass(user.role)}">
+										<span
+											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold {getRoleBadgeClass(
+												user.role
+											)}"
+										>
 											{ROLE_LABELS[user.role as StaffRole] ?? user.role}
 										</span>
 									</td>
 									<td class="px-6 py-4">
 										{#if user.department}
-											<div class="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+											<div
+												class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+											>
 												<Building2 size={12} class="opacity-60" />
 												{DEPARTMENT_LABELS[user.department as Department] ?? user.department}
 											</div>
@@ -271,11 +383,18 @@
 											<span class="text-[11px] text-muted-foreground/40">—</span>
 										{/if}
 									</td>
-									<td class="px-6 py-4 text-xs text-muted-foreground/80 font-mono">
-										{format(new Date(user.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
+									<td class="px-6 py-4 font-mono text-xs text-muted-foreground/80">
+										{format(new Date(user.createdAt), 'dd/MM/yyyy HH:mm', {
+											locale: getDateLocale($locale)
+										})}
 									</td>
 									<td class="px-6 py-4 text-right">
-										<Button variant="ghost" size="sm" onclick={() => openEditModal(user)} class="rounded-lg h-8 w-8 p-0 opacity-0 group-hover/row:opacity-100 transition-opacity text-primary hover:bg-primary/10">
+										<Button
+											variant="ghost"
+											size="sm"
+											onclick={() => openEditModal(user)}
+											class="h-8 w-8 rounded-lg p-0 text-primary opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-primary/10"
+										>
 											<Pencil size={14} />
 										</Button>
 									</td>
@@ -291,62 +410,128 @@
 	<!-- Create User Modal -->
 	{#if showCreateModal}
 		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-			<div
-				class="absolute inset-0 bg-background/80 backdrop-blur-md animate-in fade-in duration-300"
+			<button
+				type="button"
+				class="absolute inset-0 animate-in bg-background/80 backdrop-blur-md duration-300 fade-in"
+				aria-label="Close create user modal"
 				onclick={() => (showCreateModal = false)}
-			></div>
+			></button>
 
-			<Card class="relative w-full max-w-lg bg-card/95 border-border shadow-2xl rounded-[2rem] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-				<div class="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-primary via-purple-500 to-primary"></div>
+			<Card
+				class="relative w-full max-w-lg animate-in overflow-hidden rounded-[2rem] border-border bg-card/95 shadow-2xl duration-300 zoom-in-95 slide-in-from-bottom-4"
+			>
+				<div
+					class="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-primary via-purple-500 to-primary"
+				></div>
 				<CardHeader class="pb-4">
 					<div class="flex items-center justify-between">
-						<CardTitle class="text-2xl font-black">Khởi tạo Cán bộ mới</CardTitle>
-						<Button variant="ghost" size="icon" class="rounded-full h-8 w-8" onclick={() => (showCreateModal = false)}>
+						<CardTitle class="text-2xl font-black">{ui.createTitle}</CardTitle>
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-8 w-8 rounded-full"
+							onclick={() => (showCreateModal = false)}
+						>
 							<X size={18} />
 						</Button>
 					</div>
-					<CardDescription class="text-muted-foreground font-medium">
-						Cấp phát định danh mới cho cán bộ vào hệ thống nghiệp vụ DVC.
+					<CardDescription class="font-medium text-muted-foreground">
+						{ui.createDescription}
 					</CardDescription>
 				</CardHeader>
 
-				<form onsubmit={handleCreateUser} class="p-6 pt-0 space-y-4">
+				<form onsubmit={handleCreateUser} class="space-y-4 p-6 pt-0">
 					{#if createError}
-						<div class="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm font-bold flex items-center gap-2">
-							<X size={14} /> {createError}
+						<div
+							class="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm font-bold text-destructive"
+						>
+							<X size={14} />
+							{createError}
 						</div>
 					{/if}
 
 					<div class="space-y-2">
-						<Label for="name" class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Họ và Tên</Label>
-						<Input id="name" placeholder="VD: Nguyễn Văn A" bind:value={newUser.name} required class="h-12 rounded-2xl bg-muted/30 border-border/40" />
+						<Label
+							for="name"
+							class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>{ui.name}</Label
+						>
+						<Input
+							id="name"
+							placeholder="VD: Nguyễn Văn A"
+							bind:value={newUser.name}
+							required
+							class="h-12 rounded-2xl border-border/40 bg-muted/30"
+						/>
 					</div>
 
 					<div class="space-y-2">
-						<Label for="email" class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Địa chỉ Email</Label>
-						<Input id="email" type="email" placeholder="example@dvc.gov.vn" bind:value={newUser.email} required class="h-12 rounded-2xl bg-muted/30 border-border/40" />
+						<Label
+							for="email"
+							class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>{ui.emailLabel}</Label
+						>
+						<Input
+							id="email"
+							type="email"
+							placeholder="example@dvc.gov.vn"
+							bind:value={newUser.email}
+							required
+							class="h-12 rounded-2xl border-border/40 bg-muted/30"
+						/>
 					</div>
 
 					<div class="space-y-2">
-						<Label for="password" class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Mật khẩu khởi tạo</Label>
-						<Input id="password" type="password" placeholder="••••••••" bind:value={newUser.password} required minlength={8} class="h-12 rounded-2xl bg-muted/30 border-border/40" />
+						<Label
+							for="password"
+							class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>{ui.initialPassword}</Label
+						>
+						<Input
+							id="password"
+							type="password"
+							placeholder="••••••••"
+							bind:value={newUser.password}
+							required
+							minlength={8}
+							class="h-12 rounded-2xl border-border/40 bg-muted/30"
+						/>
 					</div>
 
 					<!-- Role selection -->
 					<div class="space-y-2">
-						<Label class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Vai trò</Label>
+						<Label
+							class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>{ui.role}</Label
+						>
 						<div class="grid grid-cols-2 gap-2">
 							{#each VALID_ROLES as role}
-								<label class="flex items-center gap-2 cursor-pointer p-3 rounded-xl border-2 transition-all
-									{newUser.role === role ? 'border-primary bg-primary/5' : 'border-border/30 hover:border-primary/30'}">
-									<input type="radio" name="role" value={role} bind:group={newUser.role} class="sr-only" />
-									<div class="w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center
-										{newUser.role === role ? 'border-primary bg-primary' : 'border-muted-foreground/30'}">
+								<label
+									class="flex cursor-pointer items-center gap-2 rounded-xl border-2 p-3 transition-all
+									{newUser.role === role
+										? 'border-primary bg-primary/5'
+										: 'border-border/30 hover:border-primary/30'}"
+								>
+									<input
+										type="radio"
+										name="role"
+										value={role}
+										bind:group={newUser.role}
+										class="sr-only"
+									/>
+									<div
+										class="flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2
+										{newUser.role === role ? 'border-primary bg-primary' : 'border-muted-foreground/30'}"
+									>
 										{#if newUser.role === role}
-											<div class="w-1 h-1 rounded-full bg-white"></div>
+											<div class="h-1 w-1 rounded-full bg-white"></div>
 										{/if}
 									</div>
-									<span class="text-xs font-semibold {newUser.role === role ? 'text-primary' : 'text-foreground'}">
+									<span
+										class="text-xs font-semibold {newUser.role === role
+											? 'text-primary'
+											: 'text-foreground'}"
+									>
 										{ROLE_LABELS[role]}
 									</span>
 								</label>
@@ -356,39 +541,52 @@
 
 					<!-- Department (conditional) -->
 					{#if needsDept}
-						<div class="space-y-2 animate-in slide-in-from-top-2 duration-200">
-							<Label class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">
-								Đơn vị phụ trách <span class="text-destructive">*</span>
+						<div class="animate-in space-y-2 duration-200 slide-in-from-top-2">
+							<Label
+								class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>
+								{ui.department} <span class="text-destructive">*</span>
 							</Label>
 							<div class="relative">
-								<Building2 size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+								<Building2
+									size={16}
+									class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground"
+								/>
 								<select
 									bind:value={newUser.department}
-									class="w-full h-12 rounded-2xl bg-muted/30 border border-border/40 pl-10 pr-4 text-sm font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20"
+									class="h-12 w-full cursor-pointer appearance-none rounded-2xl border border-border/40 bg-muted/30 pr-4 pl-10 text-sm font-medium focus:ring-2 focus:ring-primary/20 focus:outline-none"
 								>
-									<option value="">— Chọn đơn vị —</option>
+									<option value="">— {ui.selectDepartment} —</option>
 									{#each VALID_DEPARTMENTS as dept}
 										<option value={dept}>{DEPARTMENT_LABELS[dept]}</option>
 									{/each}
 								</select>
-								<ChevronDown size={14} class="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+								<ChevronDown
+									size={14}
+									class="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted-foreground"
+								/>
 							</div>
 						</div>
 					{/if}
 
 					<div class="grid grid-cols-2 gap-4 pt-2">
-						<Button type="button" variant="outline" class="h-12 rounded-2xl font-bold border-border/40" onclick={() => (showCreateModal = false)}>
-							Hủy bỏ
+						<Button
+							type="button"
+							variant="outline"
+							class="h-12 rounded-2xl border-border/40 font-bold"
+							onclick={() => (showCreateModal = false)}
+						>
+							{ui.cancel}
 						</Button>
 						<Button
 							type="submit"
 							disabled={isCreating}
-							class="h-12 rounded-2xl bg-primary text-primary-foreground font-bold shadow-lg shadow-primary/20"
+							class="h-12 rounded-2xl bg-primary font-bold text-primary-foreground shadow-lg shadow-primary/20"
 						>
 							{#if isCreating}
-								<Loader2 size={18} class="mr-2 animate-spin" /> Đang khởi tạo...
+								<Loader2 size={18} class="mr-2 animate-spin" /> {ui.creating}
 							{:else}
-								Xác nhận cấp phát
+								{ui.confirmProvision}
 							{/if}
 						</Button>
 					</div>
@@ -400,47 +598,78 @@
 	<!-- Edit Role Modal -->
 	{#if showEditModal && editingUser}
 		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-			<div
-				class="absolute inset-0 bg-background/80 backdrop-blur-md animate-in fade-in duration-300"
+			<button
+				type="button"
+				class="absolute inset-0 animate-in bg-background/80 backdrop-blur-md duration-300 fade-in"
+				aria-label="Close edit user modal"
 				onclick={() => (showEditModal = false)}
-			></div>
+			></button>
 
-			<Card class="relative w-full max-w-lg bg-card/95 border-border shadow-2xl rounded-[2rem] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-				<div class="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-amber-500 to-amber-300"></div>
+			<Card
+				class="relative w-full max-w-lg animate-in overflow-hidden rounded-[2rem] border-border bg-card/95 shadow-2xl duration-300 zoom-in-95 slide-in-from-bottom-4"
+			>
+				<div class="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-amber-500 to-amber-300"></div>
 				<CardHeader class="pb-4">
 					<div class="flex items-center justify-between">
-						<CardTitle class="text-2xl font-black">Cập nhật Vai trò</CardTitle>
-						<Button variant="ghost" size="icon" class="rounded-full h-8 w-8" onclick={() => (showEditModal = false)}>
+						<CardTitle class="text-2xl font-black">{ui.editTitle}</CardTitle>
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-8 w-8 rounded-full"
+							onclick={() => (showEditModal = false)}
+						>
 							<X size={18} />
 						</Button>
 					</div>
-					<CardDescription class="text-muted-foreground font-medium">
-						Thay đổi phân quyền nghiệp vụ cho <span class="font-bold text-foreground">{editingUser.name}</span>.
+					<CardDescription class="font-medium text-muted-foreground">
+						{ui.editPrefix} <span class="font-bold text-foreground">{editingUser.name}</span>.
 					</CardDescription>
 				</CardHeader>
 
-				<form onsubmit={handleUpdateRole} class="p-6 pt-0 space-y-4">
+				<form onsubmit={handleUpdateRole} class="space-y-4 p-6 pt-0">
 					{#if updateError}
-						<div class="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm font-bold flex items-center gap-2">
-							<X size={14} /> {updateError}
+						<div
+							class="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm font-bold text-destructive"
+						>
+							<X size={14} />
+							{updateError}
 						</div>
 					{/if}
 
 					<!-- Role selection -->
 					<div class="space-y-2">
-						<Label class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Vai trò mới</Label>
+						<Label
+							class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+							>{ui.newRole}</Label
+						>
 						<div class="grid grid-cols-2 gap-2">
 							{#each VALID_ROLES as role}
-								<label class="flex items-center gap-2 cursor-pointer p-3 rounded-xl border-2 transition-all
-									{editingUser.role === role ? 'border-amber-500 bg-amber-500/5' : 'border-border/30 hover:border-amber-500/30'}">
-									<input type="radio" name="editRole" value={role} bind:group={editingUser.role} class="sr-only" />
-									<div class="w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center
-										{editingUser.role === role ? 'border-amber-500 bg-amber-500' : 'border-muted-foreground/30'}">
+								<label
+									class="flex cursor-pointer items-center gap-2 rounded-xl border-2 p-3 transition-all
+									{editingUser.role === role
+										? 'border-amber-500 bg-amber-500/5'
+										: 'border-border/30 hover:border-amber-500/30'}"
+								>
+									<input
+										type="radio"
+										name="editRole"
+										value={role}
+										bind:group={editingUser.role}
+										class="sr-only"
+									/>
+									<div
+										class="flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2
+										{editingUser.role === role ? 'border-amber-500 bg-amber-500' : 'border-muted-foreground/30'}"
+									>
 										{#if editingUser.role === role}
-											<div class="w-1 h-1 rounded-full bg-white"></div>
+											<div class="h-1 w-1 rounded-full bg-white"></div>
 										{/if}
 									</div>
-									<span class="text-xs font-semibold {editingUser.role === role ? 'text-amber-600 dark:text-amber-500' : 'text-foreground'}">
+									<span
+										class="text-xs font-semibold {editingUser.role === role
+											? 'text-amber-600 dark:text-amber-500'
+											: 'text-foreground'}"
+									>
 										{ROLE_LABELS[role]}
 									</span>
 								</label>
@@ -449,38 +678,53 @@
 					</div>
 
 					{#if editNeedsDept}
-						<div class="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-							<Label for="edit-department" class="text-xs font-black uppercase tracking-widest text-muted-foreground/80 ml-1">Đơn vị phụ trách</Label>
-							<div class="relative group">
-								<Building2 size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-amber-500 transition-colors pointer-events-none" />
+						<div class="animate-in space-y-2 duration-300 fade-in slide-in-from-top-2">
+							<Label
+								for="edit-department"
+								class="ml-1 text-xs font-black tracking-widest text-muted-foreground/80 uppercase"
+								>{ui.department}</Label
+							>
+							<div class="group relative">
+								<Building2
+									size={16}
+									class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-amber-500"
+								/>
 								<select
 									id="edit-department"
 									bind:value={editingUser.department}
-									class="w-full h-12 pl-10 pr-10 appearance-none bg-background border-2 border-border/50 rounded-2xl focus:outline-none focus:ring-0 focus:border-amber-500/50 transition-colors cursor-pointer text-sm font-semibold"
+									class="h-12 w-full cursor-pointer appearance-none rounded-2xl border-2 border-border/50 bg-background pr-10 pl-10 text-sm font-semibold transition-colors focus:border-amber-500/50 focus:ring-0 focus:outline-none"
 								>
-									<option value="" disabled selected>Chọn đơn vị phụ trách...</option>
+									<option value="" disabled selected>{ui.selectDepartmentPlaceholder}</option>
 									{#each VALID_DEPARTMENTS as dept}
 										<option value={dept}>{DEPARTMENT_LABELS[dept]}</option>
 									{/each}
 								</select>
-								<ChevronDown size={16} class="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+								<ChevronDown
+									size={16}
+									class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-muted-foreground"
+								/>
 							</div>
 						</div>
 					{/if}
 
 					<div class="grid grid-cols-2 gap-4 pt-4">
-						<Button type="button" variant="outline" class="h-12 rounded-2xl font-bold border-border/40" onclick={() => (showEditModal = false)}>
-							Hủy bỏ
+						<Button
+							type="button"
+							variant="outline"
+							class="h-12 rounded-2xl border-border/40 font-bold"
+							onclick={() => (showEditModal = false)}
+						>
+							{ui.cancel}
 						</Button>
 						<Button
 							type="submit"
 							disabled={isUpdatingRole}
-							class="h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-lg shadow-amber-500/20"
+							class="h-12 rounded-2xl bg-amber-500 font-bold text-black shadow-lg shadow-amber-500/20 hover:bg-amber-600"
 						>
 							{#if isUpdatingRole}
-								<Loader2 size={18} class="mr-2 animate-spin" /> Xử lý...
+								<Loader2 size={18} class="mr-2 animate-spin" /> {ui.processing}
 							{:else}
-								Cập nhật
+								{ui.update}
 							{/if}
 						</Button>
 					</div>

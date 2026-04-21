@@ -6,14 +6,13 @@
  */
 
 import type { DocumentSummary } from './types';
+import { LOCALE_COOKIE_NAME } from '$lib/i18n';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const WEB_DATA_MODE: string =
-	(
-		(import.meta as { env?: Record<string, string | undefined> }).env
-			?.VITE_WEB_DATA_MODE ?? ''
-	).toLowerCase();
+const WEB_DATA_MODE: string = (
+	(import.meta as { env?: Record<string, string | undefined> }).env?.VITE_WEB_DATA_MODE ?? ''
+).toLowerCase();
 const USE_MOCK_DATA = WEB_DATA_MODE === 'mock';
 
 const MOCK_DATA_URL = '/mock/qwen-data.json';
@@ -77,7 +76,8 @@ async function loadJson(url: string): Promise<unknown> {
 function toDetailMap(items: JsonRecord[]): Map<string, JsonRecord> {
 	const map = new Map<string, JsonRecord>();
 	for (const item of items) {
-		const id = asString(item['id']) ?? asString(item['documentId']) ?? asString(item['document_id']);
+		const id =
+			asString(item['id']) ?? asString(item['documentId']) ?? asString(item['document_id']);
 		const code =
 			asString(item['trackingCode']) ?? asString(item['tracking_code']) ?? asString(item['code']);
 		if (id) map.set(`id:${id}`, item);
@@ -96,7 +96,11 @@ function toExtractedData(payload: JsonRecord | null): Record<string, unknown> | 
 	return extracted ?? undefined;
 }
 
-function normalizeDocument(base: JsonRecord, detail: JsonRecord | undefined, index: number): DocumentSummary {
+function normalizeDocument(
+	base: JsonRecord,
+	detail: JsonRecord | undefined,
+	index: number
+): DocumentSummary {
 	const nowIso = new Date().toISOString();
 	const baseId =
 		asString(base['id']) ??
@@ -115,8 +119,12 @@ function normalizeDocument(base: JsonRecord, detail: JsonRecord | undefined, ind
 	return {
 		id: baseId,
 		trackingCode,
-		status: normalizeStatus(base['status'] ?? detail?.['status']) as import('./types').DocumentStatus,
-		documentType: normalizeDocumentType(base['documentType'] ?? base['document_type'] ?? detail?.['documentType']) as import('./types').DocumentType,
+		status: normalizeStatus(
+			base['status'] ?? detail?.['status']
+		) as import('./types').DocumentStatus,
+		documentType: normalizeDocumentType(
+			base['documentType'] ?? base['document_type'] ?? detail?.['documentType']
+		) as import('./types').DocumentType,
 		securityLevel: normalizeSecurityLevel(
 			base['securityLevel'] ?? base['security_level'] ?? detail?.['securityLevel']
 		) as import('./types').SecurityLevel,
@@ -147,7 +155,8 @@ async function getMockDocuments(forceReload = false): Promise<DocumentSummary[]>
 	const detailMap = toDetailMap(detailItems);
 	const sourceItems = dataItems.length > 0 ? dataItems : detailItems;
 	mockDocumentsCache = sourceItems.map((item, index) => {
-		const id = asString(item['id']) ?? asString(item['documentId']) ?? asString(item['document_id']);
+		const id =
+			asString(item['id']) ?? asString(item['documentId']) ?? asString(item['document_id']);
 		const code =
 			asString(item['trackingCode']) ?? asString(item['tracking_code']) ?? asString(item['code']);
 		const detail =
@@ -158,18 +167,19 @@ async function getMockDocuments(forceReload = false): Promise<DocumentSummary[]>
 	return mockDocumentsCache;
 }
 
-
-
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 	const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null;
+	const locale =
+		typeof localStorage !== 'undefined' ? localStorage.getItem(LOCALE_COOKIE_NAME) : null;
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
 		'X-Correlation-ID': crypto.randomUUID(),
 		...(init?.headers as Record<string, string> | undefined)
 	};
 	if (token) headers['Authorization'] = `Bearer ${token}`;
+	if (locale) headers['X-UI-Locale'] = locale;
 	const res = await fetch(`/api${path}`, { ...init, headers });
 	if (res.status === 401) {
 		if (typeof localStorage !== 'undefined') localStorage.removeItem('access_token');
@@ -179,10 +189,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 	return res.json() as Promise<T>;
 }
 
-async function withMockFallback<T>(
-	realFn: () => Promise<T>,
-	mockFn: () => Promise<T>
-): Promise<T> {
+async function withMockFallback<T>(realFn: () => Promise<T>, mockFn: () => Promise<T>): Promise<T> {
 	if (USE_MOCK_DATA) return mockFn();
 	try {
 		return await realFn();
@@ -199,10 +206,10 @@ export const documentsApi = {
 		withMockFallback(
 			async () => {
 				const qs = new URLSearchParams();
-				if (params?.status)       qs.set('status', params.status);
+				if (params?.status) qs.set('status', params.status);
 				if (params?.documentType) qs.set('documentType', params.documentType);
-				if (params?.page)         qs.set('page', String(params.page));
-				if (params?.limit)        qs.set('limit', String(params.limit));
+				if (params?.page) qs.set('page', String(params.page));
+				if (params?.limit) qs.set('limit', String(params.limit));
 				return apiFetch<{ documents: DocumentSummary[]; total: number }>(
 					`/documents${qs.toString() ? `?${qs}` : ''}`
 				);
@@ -210,11 +217,11 @@ export const documentsApi = {
 			async () => {
 				const documents = await getMockDocuments();
 				const filtered = documents.filter((d) => {
-					if (params?.status       && d.status       !== params.status)       return false;
+					if (params?.status && d.status !== params.status) return false;
 					if (params?.documentType && d.documentType !== params.documentType) return false;
 					return true;
 				});
-				const page  = params?.page  ?? 1;
+				const page = params?.page ?? 1;
 				const limit = params?.limit ?? 50;
 				const start = (page - 1) * limit;
 				return { documents: filtered.slice(start, start + limit), total: filtered.length };
@@ -249,19 +256,20 @@ export const documentsApi = {
 			}
 		),
 
-	approve: (
-		documentId: string,
-		payload: { approved: boolean; reason?: string }
-	) => apiFetch(`/documents/${documentId}/approve`, { method: 'POST', body: JSON.stringify(payload) }),
+	approve: (documentId: string, payload: { approved: boolean; reason?: string }) =>
+		apiFetch(`/documents/${documentId}/approve`, { method: 'POST', body: JSON.stringify(payload) }),
 
 	submit: (formData: FormData) =>
 		fetch('/api/documents', { method: 'POST', body: formData }).then((r) => {
 			if (!r.ok) throw new Error('Submit failed');
-			return r.json() as Promise<{ documentId: string; trackingCode: string; status: string; message: string }>;
+			return r.json() as Promise<{
+				documentId: string;
+				trackingCode: string;
+				status: string;
+				message: string;
+			}>;
 		})
 };
-
-
 
 // ─── AI API ───────────────────────────────────────────────────────────────────
 

@@ -2,12 +2,13 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import OpenAI from 'openai';
+import { getAiOutputInstruction, getRequestLocale } from '$lib/i18n';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
 }
 
-export const POST: RequestHandler = async ({ params, request, platform, locals }) => {
+export const POST: RequestHandler = async ({ params, request, platform, locals, cookies }) => {
 	const db = getDB(platform);
 	if (!db) return error(503, 'Database unavailable');
 	if (!locals.user) return error(401, 'Unauthorized');
@@ -18,7 +19,8 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 	}
 
 	const { id } = params;
-	const body = await request.json() as { decision: string };
+	const locale = getRequestLocale(request.headers) || getRequestLocale(cookies);
+	const body = (await request.json()) as { decision: string };
 	const decision = body.decision;
 
 	const doc = await db
@@ -39,7 +41,9 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 
 	let extractedData: Record<string, any> = {};
 	if (doc['extracted_data']) {
-		try { extractedData = JSON.parse(doc['extracted_data'] as string); } catch (_) {}
+		try {
+			extractedData = JSON.parse(doc['extracted_data'] as string);
+		} catch (_) {}
 	}
 
 	const officerBrief = extractedData.ai_officer_brief || '';
@@ -49,11 +53,13 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 
 	let instruction = '';
 	if (decision === 'APPROVED') {
-		instruction = 'Soạn 1 câu ngắn gọn đồng ý phê duyệt thay cho Lãnh đạo dựa trên đề xuất của chuyên viên.';
+		instruction =
+			'Soạn 1 câu ngắn gọn đồng ý phê duyệt thay cho Lãnh đạo dựa trên đề xuất của chuyên viên.';
 	} else if (decision === 'REJECTED') {
 		instruction = 'Soạn 2-3 câu từ chối hồ sơ, nêu lý do hợp lý dựa trên thông tin hồ sơ chưa đạt.';
 	} else {
-		instruction = 'Soạn 2-3 câu yêu cầu chuyên viên/công dân sửa đổi, bổ sung thêm tài liệu còn thiếu hoặc chưa chính xác.';
+		instruction =
+			'Soạn 2-3 câu yêu cầu chuyên viên/công dân sửa đổi, bổ sung thêm tài liệu còn thiếu hoặc chưa chính xác.';
 	}
 
 	const prompt = `Bạn là Lãnh đạo cơ quan nhà nước. Dựa trên các thông tin sau về một hồ sơ:
@@ -62,7 +68,8 @@ export const POST: RequestHandler = async ({ params, request, platform, locals }
 - Ý kiến chuyên môn của chuyên viên: ${lastFeedback}
 
 Nhiệm vụ: ${instruction}
-Viết rất ngắn gọn, súc tích, văn phong chỉ đạo dứt khoát. Bắt đầu thẳng vào ý chính, không cần chào hỏi hay kính gửi. KHÔNG dùng markdown.`;
+Viết rất ngắn gọn, súc tích, văn phong chỉ đạo dứt khoát. Bắt đầu thẳng vào ý chính, không cần chào hỏi hay kính gửi. KHÔNG dùng markdown.
+${getAiOutputInstruction(locale)}`;
 
 	try {
 		const completion = await openai.chat.completions.create(

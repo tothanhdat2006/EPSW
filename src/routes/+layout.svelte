@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { Upload, Search, ShieldCheck } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
+	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+	import { currentMessages, initializeLocale } from '$lib/i18n';
 
 	let { children } = $props();
 
@@ -11,14 +14,18 @@
 	const isPortal = $derived(page.url.pathname.startsWith('/portal'));
 
 	const navItems = [
-		{ href: '/', icon: Upload, label: 'Nộp hồ sơ' },
-		{ href: '/track', icon: Search, label: 'Tra cứu' }
+		{ href: '/', icon: Upload, label: () => $currentMessages.submitProfile },
+		{ href: '/track', icon: Search, label: () => $currentMessages.trackProfile }
 	];
+
+	onMount(() => {
+		initializeLocale();
+	});
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<meta name="description" content="Cổng Dịch vụ Công — Nộp và tra cứu hồ sơ trực tuyến" />
+	<meta name="description" content={$currentMessages.publicPortalSubtitle} />
 </svelte:head>
 
 {#if isPortal}
@@ -26,59 +33,79 @@
 {:else}
 	<div class="flex min-h-screen flex-col">
 		<!-- Public Header -->
-		<header class="sticky top-0 z-50 border-b border-border/40 bg-background/60 backdrop-blur-xl shadow-sm">
+		<header
+			class="sticky top-0 z-50 border-b border-border/40 bg-background/60 shadow-sm backdrop-blur-xl"
+		>
 			<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-				<a href="/" class="flex items-center gap-3 group">
+				<a href="/" class="group flex items-center gap-3">
 					<!-- <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 shadow-md group-hover:shadow-primary/20 transition-all">
 						<span class="text-sm font-extrabold text-white">DVC</span>
 					</div> -->
 					<div>
-						<p class="font-bold leading-tight text-foreground tracking-wide group-hover:text-primary transition-colors">Cổng Dịch vụ Công</p>
-						<p class="text-xs font-medium text-muted-foreground uppercase tracking-widest mt-0.5">Nộp và tra cứu hồ sơ trực tuyến</p>
+						<p
+							class="leading-tight font-bold tracking-wide text-foreground transition-colors group-hover:text-primary"
+						>
+							{$currentMessages.publicPortal}
+						</p>
+						<p class="mt-0.5 text-xs font-medium tracking-widest text-muted-foreground uppercase">
+							{$currentMessages.publicPortalSubtitle}
+						</p>
 					</div>
 				</a>
 
 				<div class="flex items-center gap-4">
-					<nav class="flex items-center gap-1.5 bg-muted/30 p-1 rounded-xl border border-border/30">
+					<nav class="flex items-center gap-1.5 rounded-xl border border-border/30 bg-muted/30 p-1">
 						{#each navItems as item}
 							{@const isActive = page.url.pathname === item.href}
 							<a
 								href={item.href}
 								class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all
-									{isActive ? 'bg-background shadow-sm text-primary border-border/50 border' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+									{isActive
+									? 'border border-border/50 bg-background text-primary shadow-sm'
+									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
 							>
 								<item.icon size={16} />
-								{item.label}
+								{item.label()}
 							</a>
 						{/each}
 					</nav>
 
-					<div class="w-px h-8 bg-border/50 mx-2"></div>
+					<LocaleSwitcher />
 
-					<Button variant="outline" class="gap-2 border-primary/20 text-primary hover:bg-primary/10 transition-colors font-bold rounded-xl" href="/portal">
+					<div class="mx-2 h-8 w-px bg-border/50"></div>
+
+					<Button
+						variant="outline"
+						class="gap-2 rounded-xl border-primary/20 font-bold text-primary transition-colors hover:bg-primary/10"
+						href="/portal"
+					>
 						<ShieldCheck size={16} />
-						Dành cho Cán bộ
+						{$currentMessages.forStaff}
 					</Button>
 				</div>
 			</div>
 		</header>
 
 		<!-- Page content -->
-		<main class="flex-1 flex flex-col pt-8">
+		<main class="flex flex-1 flex-col pt-8">
 			{@render children()}
 		</main>
 
 		<!-- Footer -->
 		<footer class="mt-auto border-t border-border/40 bg-background/40 backdrop-blur-md">
-			<div class="mx-auto max-w-5xl px-4 py-6 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-widest">
+			<div
+				class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-4 py-6 text-xs font-medium tracking-widest text-muted-foreground uppercase md:flex-row"
+			>
 				<div class="flex items-center gap-2">
-					<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
-					Hệ thống DVC trực tuyến hoạt động bình thường
+					<div
+						class="h-2 w-2 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+					></div>
+					{$currentMessages.systemOnline}
 				</div>
 				<div class="flex items-center gap-4">
-					<span>Hỗ trợ: 1900-xxxx</span>
+					<span>{$currentMessages.support}: 1900-xxxx</span>
 					<span>•</span>
-					<span>Email: hotro@dvc.gov.vn</span>
+					<span>{$currentMessages.email}: hotro@dvc.gov.vn</span>
 				</div>
 			</div>
 		</footer>

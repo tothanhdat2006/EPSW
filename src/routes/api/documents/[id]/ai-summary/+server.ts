@@ -7,6 +7,7 @@ import {
 	parseRawFileUrls,
 	type VisionContentPart
 } from '$lib/server/ai-document';
+import { getAiOutputInstruction, getRequestLocale } from '$lib/i18n';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
@@ -17,12 +18,13 @@ function getDB(platform: App.Platform | undefined) {
  * Converts the uploaded file (PDF or image) to PNG images via mupdf WASM,
  * then sends all pages to the configured vision model for summarisation.
  */
-export const POST: RequestHandler = async ({ params, platform, locals }) => {
+export const POST: RequestHandler = async ({ params, platform, locals, request, cookies }) => {
 	const db = getDB(platform);
 	if (!db) return error(503, 'Database unavailable');
 	if (!locals.user) return error(401, 'Unauthorized');
 
 	const { id } = params;
+	const locale = getRequestLocale(request.headers) || getRequestLocale(cookies);
 
 	const doc = await db
 		.prepare(`SELECT id, extracted_data, raw_file_url FROM document WHERE id = ? LIMIT 1`)
@@ -46,7 +48,8 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	const summaryPrompt = `Bạn là Chuyên viên phân tích hồ sơ hành chính.
 Hãy đọc toàn bộ nội dung các trang tài liệu được đính kèm và viết một "Tờ trình Liên ngành" tóm tắt hồ sơ này trong đúng 3-4 dòng ngắn gọn, súc tích để trình Lãnh đạo xem xét.
 Nội dung nên bao gồm: Loại hồ sơ, thông tin chính yếu của người dân/tổ chức nộp hồ sơ.
-QUAN TRỌNG: TUYỆT ĐỐI CHỈ SỬ DỤNG thông tin có trong tài liệu đính kèm. KHÔNG ĐƯỢC tự bịa đặt, suy diễn, hoặc thêm bất kỳ thông tin nào bên ngoài. Không giải thích, không output thêm gì ngoài nội dung Tờ trình.`;
+QUAN TRỌNG: TUYỆT ĐỐI CHỈ SỬ DỤNG thông tin có trong tài liệu đính kèm. KHÔNG ĐƯỢC tự bịa đặt, suy diễn, hoặc thêm bất kỳ thông tin nào bên ngoài. Không giải thích, không output thêm gì ngoài nội dung Tờ trình.
+${getAiOutputInstruction(locale)}`;
 
 	contentParts.push({ type: 'text', text: summaryPrompt });
 

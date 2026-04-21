@@ -7,6 +7,7 @@ import {
 	parseRawFileUrls,
 	type VisionContentPart
 } from '$lib/server/ai-document';
+import { getAiOutputInstruction, getRequestLocale } from '$lib/i18n';
 
 function getDB(platform: App.Platform | undefined) {
 	return (platform?.env as Record<string, unknown> | undefined)?.['DB'] as D1Database | undefined;
@@ -18,7 +19,7 @@ function getDB(platform: App.Platform | undefined) {
  * reading the document file + all existing comments/officer feedback.
  * Returns { report: string, recommendation: 'APPROVE' | 'REVISION_REQUESTED' }
  */
-export const POST: RequestHandler = async ({ params, platform, locals }) => {
+export const POST: RequestHandler = async ({ params, platform, locals, request, cookies }) => {
 	const db = getDB(platform);
 	if (!db) return error(503, 'Database unavailable');
 	if (!locals.user) return error(401, 'Unauthorized');
@@ -29,6 +30,7 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	}
 
 	const { id } = params;
+	const locale = getRequestLocale(request.headers) || getRequestLocale(cookies);
 
 	const doc = await db
 		.prepare(`SELECT id, extracted_data, raw_file_url FROM document WHERE id = ? LIMIT 1`)
@@ -48,7 +50,9 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	// ----- Parse existing data -----
 	let extractedData: Record<string, any> = {};
 	if (doc['extracted_data']) {
-		try { extractedData = JSON.parse(doc['extracted_data'] as string); } catch (_) {}
+		try {
+			extractedData = JSON.parse(doc['extracted_data'] as string);
+		} catch (_) {}
 	}
 
 	const aiSummary: string = extractedData.ai_summary || '';
@@ -56,17 +60,22 @@ export const POST: RequestHandler = async ({ params, platform, locals }) => {
 	const officerFeedback: any[] = extractedData.officerFeedback || [];
 
 	// ----- Build context strings -----
-	const commentBlock = comments.length > 0
-		? comments.map((c: any) =>
-			`- [${c.role === 'lanh_dao' ? 'Lãnh đạo' : 'Chuyên viên'} ${c.author} — ${new Date(c.timestamp * 1000).toLocaleDateString('vi-VN')}]: ${c.text}`
-		).join('\n')
-		: '(Chưa có ý kiến thảo luận)';
+	const commentBlock =
+		comments.length > 0
+			? comments
+					.map(
+						(c: any) =>
+							`- [${c.role === 'lanh_dao' ? 'Lãnh đạo' : 'Chuyên viên'} ${c.author} — ${new Date(c.timestamp * 1000).toLocaleDateString('vi-VN')}]: ${c.text}`
+					)
+					.join('\n')
+			: '(Chưa có ý kiến thảo luận)';
 
-	const feedbackBlock = officerFeedback.length > 0
-		? officerFeedback.map((f: any) =>
-			`- [${f.officer} — ${f.decision}]: ${f.feedback || 'không ghi rõ'}`
-		).join('\n')
-		: '(Chưa có ý kiến luân chuyển trước đó)';
+	const feedbackBlock =
+		officerFeedback.length > 0
+			? officerFeedback
+					.map((f: any) => `- [${f.officer} — ${f.decision}]: ${f.feedback || 'không ghi rõ'}`)
+					.join('\n')
+			: '(Chưa có ý kiến luân chuyển trước đó)';
 
 	// ----- Build multimodal content -----
 	const contentParts: VisionContentPart[] = [];
@@ -83,7 +92,8 @@ Nguyên tắc bắt buộc:
 - Văn phong hành chính, ngắn gọn, tập trung vào quyết định xử lý.
 - Dòng CUỐI CÙNG phải là một trong hai:
   "KẾT LUẬN: APPROVE" hoặc "KẾT LUẬN: REVISION_REQUESTED"
-- Không thêm nội dung nào sau dòng KẾT LUẬN.`;
+- Không thêm nội dung nào sau dòng KẾT LUẬN.
+- ${getAiOutputInstruction(locale)}`;
 
 	const reviewContextPrompt = `Bối cảnh hồ sơ:
 1) Tóm tắt AI đã có: ${aiSummary || '(chưa có)'}

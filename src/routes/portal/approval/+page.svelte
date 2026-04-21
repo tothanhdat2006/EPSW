@@ -1,10 +1,20 @@
 <script lang="ts">
 	import {
-		CheckCircle, XCircle, Brain, FileText, ShieldAlert, User,
-		Building2, Calendar, Clock, Fingerprint, ChevronRight, Loader2
+		CheckCircle,
+		XCircle,
+		Brain,
+		FileText,
+		ShieldAlert,
+		User,
+		Building2,
+		Calendar,
+		Clock,
+		Fingerprint,
+		ChevronRight,
+		Loader2
 	} from 'lucide-svelte';
 	import { formatDistanceToNow, format } from 'date-fns';
-	import { vi } from 'date-fns/locale';
+	import { getDateLocale, locale } from '$lib/i18n';
 	import PriorityBadge from '$lib/components/PriorityBadge.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { documentsApi } from '$lib/api/client';
@@ -41,6 +51,68 @@
 	let isActing = $state(false);
 	let actionResult = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
+	const ui = $derived(
+		$locale === 'en'
+			? {
+					title: 'Leadership approval',
+					loading: 'Loading...',
+					waitingCount: 'records waiting for approval',
+					allDone: 'All processed',
+					noneWaiting: 'There are no records waiting for approval',
+					unknownType: 'Unidentified type',
+					selectRecord: 'Select a record to view details',
+					selectHint: 'Click a record from the list on the left',
+					waitingRecord: 'Record waiting for review',
+					successApprove: 'The record was approved successfully.',
+					successReject: 'The record was rejected.',
+					errorAction: 'An error occurred. Please try again.',
+					aiScore: 'AI Score',
+					aiSummary: 'AI Summary',
+					issuingAuthority: 'Issuing Authority',
+					subject: 'Subject',
+					subjectId: 'Identity Number',
+					referenceNumber: 'Reference Number',
+					issueDate: 'Issue Date',
+					expiryDate: 'Expiry Date',
+					securityLevel: 'Security Level',
+					purpose: 'Purpose',
+					keywords: 'Keywords',
+					rejectionReason: 'Rejection reason (required when not approving)',
+					rejectionPlaceholder: 'Enter the reason for rejecting this record...',
+					approve: 'Approve',
+					reject: 'Reject'
+				}
+			: {
+					title: 'Phê duyệt Lãnh đạo',
+					loading: 'Đang tải...',
+					waitingCount: 'hồ sơ chờ phê duyệt',
+					allDone: 'Tất cả đã xử lý!',
+					noneWaiting: 'Không có hồ sơ nào chờ phê duyệt',
+					unknownType: 'Loại chưa xác định',
+					selectRecord: 'Chọn hồ sơ để xem chi tiết',
+					selectHint: 'Nhấn vào một hồ sơ ở danh sách bên trái',
+					waitingRecord: 'Hồ sơ chờ duyệt',
+					successApprove: 'Hồ sơ đã được phê duyệt thành công.',
+					successReject: 'Hồ sơ đã bị từ chối.',
+					errorAction: 'Có lỗi xảy ra. Vui lòng thử lại.',
+					aiScore: 'AI Score',
+					aiSummary: 'Tóm tắt AI',
+					issuingAuthority: 'Cơ quan ban hành',
+					subject: 'Đối tượng',
+					subjectId: 'Số định danh',
+					referenceNumber: 'Số tham chiếu',
+					issueDate: 'Ngày ban hành',
+					expiryDate: 'Ngày hết hạn',
+					securityLevel: 'Mức bảo mật',
+					purpose: 'Mục đích',
+					keywords: 'Từ khóa',
+					rejectionReason: 'Lý do từ chối (bắt buộc nếu không duyệt)',
+					rejectionPlaceholder: 'Nhập lý do từ chối hồ sơ...',
+					approve: 'Phê duyệt',
+					reject: 'Từ chối'
+				}
+	);
+
 	// ─── Data fetching ────────────────────────────────────────────────────────
 
 	async function loadDocuments() {
@@ -71,14 +143,14 @@
 			});
 			actionResult = {
 				type: 'success',
-				message: approved ? 'Hồ sơ đã được phê duyệt thành công.' : 'Hồ sơ đã bị từ chối.'
+				message: approved ? ui.successApprove : ui.successReject
 			};
 			await loadDocuments();
 			selectedDoc = null;
 			rejectionReason = '';
 			setTimeout(() => (actionResult = null), 3000);
 		} catch {
-			actionResult = { type: 'error', message: 'Có lỗi xảy ra. Vui lòng thử lại.' };
+			actionResult = { type: 'error', message: ui.errorAction };
 		} finally {
 			isActing = false;
 		}
@@ -87,7 +159,11 @@
 	function parseExtracted(doc: DocumentWithData): ExtractedData {
 		if (!doc.extractedData) return {};
 		if (typeof doc.extractedData === 'string') {
-			try { return JSON.parse(doc.extractedData); } catch { return {}; }
+			try {
+				return JSON.parse(doc.extractedData);
+			} catch {
+				return {};
+			}
 		}
 		return doc.extractedData as ExtractedData;
 	}
@@ -96,29 +172,29 @@
 </script>
 
 <svelte:head>
-	<title>Phê duyệt Lãnh đạo — DVC Portal</title>
+	<title>{ui.title} — DVC Portal</title>
 </svelte:head>
 
-<div class="flex h-full min-h-screen animate-in fade-in duration-500">
+<div class="flex h-full min-h-screen animate-in duration-500 fade-in">
 	<!-- ─── Left: Document Queue ─────────────────────────────────────────── -->
 	<div class="flex w-80 shrink-0 flex-col border-r border-border/50 bg-muted/10">
 		<!-- Header -->
 		<div class="border-b border-border/50 px-5 py-5">
-			<h1 class="text-lg font-extrabold tracking-tight text-foreground">Phê duyệt Lãnh đạo</h1>
+			<h1 class="text-lg font-extrabold tracking-tight text-foreground">{ui.title}</h1>
 			<p class="mt-0.5 text-xs font-medium text-muted-foreground">
 				{#if isLoading}
-					<span class="animate-pulse">Đang tải...</span>
+					<span class="animate-pulse">{ui.loading}</span>
 				{:else}
-					{documents.length} hồ sơ chờ phê duyệt
+					{documents.length} {ui.waitingCount}
 				{/if}
 			</p>
 		</div>
 
 		<!-- List -->
-		<div class="flex-1 overflow-y-auto p-3 space-y-2">
+		<div class="flex-1 space-y-2 overflow-y-auto p-3">
 			{#if isLoading}
 				{#each Array(4) as _}
-					<div class="rounded-xl border border-border/30 bg-card p-4 space-y-2">
+					<div class="space-y-2 rounded-xl border border-border/30 bg-card p-4">
 						<Skeleton class="h-4 w-32" />
 						<Skeleton class="h-3 w-48" />
 						<Skeleton class="h-3 w-24" />
@@ -126,43 +202,61 @@
 				{/each}
 			{:else if documents.length === 0}
 				<div class="flex flex-col items-center justify-center py-16 text-center">
-					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+					<div
+						class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10"
+					>
 						<CheckCircle size={32} class="text-emerald-500" />
 					</div>
-					<p class="text-sm font-semibold text-foreground">Tất cả đã xử lý!</p>
-					<p class="mt-1 text-xs text-muted-foreground">Không có hồ sơ nào chờ phê duyệt</p>
+					<p class="text-sm font-semibold text-foreground">{ui.allDone}</p>
+					<p class="mt-1 text-xs text-muted-foreground">{ui.noneWaiting}</p>
 				</div>
 			{:else}
 				{#each documents as doc}
 					{@const ext = parseExtracted(doc)}
 					<button
-						onclick={() => { selectedDoc = doc; rejectionReason = ''; actionResult = null; }}
+						onclick={() => {
+							selectedDoc = doc;
+							rejectionReason = '';
+							actionResult = null;
+						}}
 						class="group w-full rounded-xl border text-left transition-all duration-200
 							{selectedDoc?.id === doc.id
-								? 'border-primary/40 bg-primary/5 shadow-sm shadow-primary/10'
-								: 'border-border/30 bg-card hover:border-border hover:bg-card/80'}"
+							? 'border-primary/40 bg-primary/5 shadow-sm shadow-primary/10'
+							: 'border-border/30 bg-card hover:border-border hover:bg-card/80'}"
 					>
 						<div class="p-4">
-							<div class="flex items-start justify-between gap-2 mb-2">
+							<div class="mb-2 flex items-start justify-between gap-2">
 								<span class="font-mono text-[11px] font-bold text-primary">{doc.trackingCode}</span>
 								<PriorityBadge documentType={doc.documentType} />
 							</div>
-							<p class="text-sm font-semibold text-foreground line-clamp-1">
-								{ext.documentType ?? 'Loại chưa xác định'}
+							<p class="line-clamp-1 text-sm font-semibold text-foreground">
+								{ext.documentType ?? ui.unknownType}
 							</p>
 							{#if ext.subjectName}
-								<p class="mt-0.5 text-xs text-muted-foreground line-clamp-1">{ext.subjectName}</p>
+								<p class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{ext.subjectName}</p>
 							{/if}
 							<div class="mt-2.5 flex items-center justify-between">
 								{#if doc.slaDeadline}
-									<span class="flex items-center gap-1 text-[10px] font-medium {new Date(doc.slaDeadline) < new Date() ? 'text-destructive' : 'text-muted-foreground'}">
+									<span
+										class="flex items-center gap-1 text-[10px] font-medium {new Date(
+											doc.slaDeadline
+										) < new Date()
+											? 'text-destructive'
+											: 'text-muted-foreground'}"
+									>
 										<Clock size={10} />
-										{formatDistanceToNow(new Date(doc.slaDeadline), { addSuffix: true, locale: vi })}
+										{formatDistanceToNow(new Date(doc.slaDeadline), {
+											addSuffix: true,
+											locale: getDateLocale($locale)
+										})}
 									</span>
 								{:else}
 									<span></span>
 								{/if}
-								<ChevronRight size={12} class="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+								<ChevronRight
+									size={12}
+									class="text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+								/>
 							</div>
 						</div>
 					</button>
@@ -174,47 +268,61 @@
 	<!-- ─── Right: Detail & Action Panel ────────────────────────────────── -->
 	<div class="flex flex-1 flex-col overflow-hidden">
 		{#if actionResult}
-			<div class="mx-8 mt-4 rounded-xl border px-4 py-3 text-sm font-semibold animate-in slide-in-from-top-2 duration-300
+			<div
+				class="mx-8 mt-4 animate-in rounded-xl border px-4 py-3 text-sm font-semibold duration-300 slide-in-from-top-2
 				{actionResult.type === 'success'
 					? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-					: 'border-destructive/30 bg-destructive/10 text-destructive'}">
+					: 'border-destructive/30 bg-destructive/10 text-destructive'}"
+			>
 				{actionResult.message}
 			</div>
 		{/if}
 
 		{#if !selectedDoc}
-			<div class="flex flex-1 flex-col items-center justify-center text-center p-12">
-				<div class="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-muted/30 border border-border/30">
+			<div class="flex flex-1 flex-col items-center justify-center p-12 text-center">
+				<div
+					class="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-border/30 bg-muted/30"
+				>
 					<FileText size={36} class="text-muted-foreground/40" />
 				</div>
-				<p class="text-base font-semibold text-muted-foreground">Chọn hồ sơ để xem chi tiết</p>
-				<p class="mt-1 text-xs text-muted-foreground/60">Nhấn vào một hồ sơ ở danh sách bên trái</p>
+				<p class="text-base font-semibold text-muted-foreground">{ui.selectRecord}</p>
+				<p class="mt-1 text-xs text-muted-foreground/60">{ui.selectHint}</p>
 			</div>
 		{:else}
 			<div class="flex-1 overflow-y-auto">
-				<div class="max-w-3xl mx-auto p-8 space-y-6">
-
+				<div class="mx-auto max-w-3xl space-y-6 p-8">
 					<!-- Header -->
 					<div class="flex items-start justify-between gap-4">
 						<div>
-							<div class="flex items-center gap-2 mb-1">
+							<div class="mb-1 flex items-center gap-2">
 								<StatusBadge status={selectedDoc.status} />
 								<PriorityBadge documentType={selectedDoc.documentType} />
 							</div>
 							<h2 class="text-2xl font-extrabold tracking-tight text-foreground">
-								{extracted?.documentType ?? 'Hồ sơ chờ duyệt'}
+								{extracted?.documentType ?? ui.waitingRecord}
 							</h2>
-							<p class="mt-1 font-mono text-xs font-bold text-primary">{selectedDoc.trackingCode}</p>
+							<p class="mt-1 font-mono text-xs font-bold text-primary">
+								{selectedDoc.trackingCode}
+							</p>
 						</div>
 						{#if typeof selectedDoc.aiConfidence === 'number'}
-							<div class="shrink-0 flex flex-col items-center justify-center rounded-2xl border px-5 py-3
+							<div
+								class="flex shrink-0 flex-col items-center justify-center rounded-2xl border px-5 py-3
 								{selectedDoc.aiConfidence >= 70
 									? 'border-emerald-500/30 bg-emerald-500/10'
-									: 'border-amber-500/30 bg-amber-500/10'}">
-								<span class="text-2xl font-black font-mono {selectedDoc.aiConfidence >= 70 ? 'text-emerald-400' : 'text-amber-400'}">
+									: 'border-amber-500/30 bg-amber-500/10'}"
+							>
+								<span
+									class="font-mono text-2xl font-black {selectedDoc.aiConfidence >= 70
+										? 'text-emerald-400'
+										: 'text-amber-400'}"
+								>
 									{selectedDoc.aiConfidence.toFixed(0)}%
 								</span>
-								<span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-0.5">AI Score</span>
+								<span
+									class="mt-0.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase"
+									>{ui.aiScore}</span
+								>
 							</div>
 						{/if}
 					</div>
@@ -222,8 +330,11 @@
 					<!-- AI Summary -->
 					{#if extracted?.summary}
 						<div class="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5">
-							<p class="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-purple-400">
-								<Brain size={13} /> Tóm tắt AI
+							<p
+								class="mb-2.5 flex items-center gap-2 text-xs font-bold tracking-widest text-purple-400 uppercase"
+							>
+								<Brain size={13} />
+								{ui.aiSummary}
 							</p>
 							<p class="text-sm leading-relaxed text-foreground/80">{extracted.summary}</p>
 						</div>
@@ -231,22 +342,15 @@
 
 					<!-- Key info grid -->
 					<div class="grid grid-cols-2 gap-3">
-						{#each [
-							{ icon: Building2, label: 'Cơ quan ban hành', value: extracted?.issuingAuthority },
-							{ icon: User, label: 'Đối tượng', value: extracted?.subjectName },
-							{ icon: Fingerprint, label: 'Số định danh', value: extracted?.subjectId },
-							{ icon: FileText, label: 'Số tham chiếu', value: extracted?.referenceNumber },
-							{ icon: Calendar, label: 'Ngày ban hành', value: extracted?.issueDate },
-							{ icon: Clock, label: 'Ngày hết hạn', value: extracted?.expiryDate },
-							{ icon: ShieldAlert, label: 'Mức bảo mật', value: selectedDoc.securityLevel },
-							{ icon: FileText, label: 'Mục đích', value: extracted?.purpose }
-						] as item}
+						{#each [{ icon: Building2, label: ui.issuingAuthority, value: extracted?.issuingAuthority }, { icon: User, label: ui.subject, value: extracted?.subjectName }, { icon: Fingerprint, label: ui.subjectId, value: extracted?.subjectId }, { icon: FileText, label: ui.referenceNumber, value: extracted?.referenceNumber }, { icon: Calendar, label: ui.issueDate, value: extracted?.issueDate }, { icon: Clock, label: ui.expiryDate, value: extracted?.expiryDate }, { icon: ShieldAlert, label: ui.securityLevel, value: selectedDoc.securityLevel }, { icon: FileText, label: ui.purpose, value: extracted?.purpose }] as item}
 							{#if item.value}
 								<div class="rounded-xl border border-border/30 bg-card p-4">
-									<p class="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+									<p
+										class="mb-1 flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+									>
 										<item.icon size={11} />{item.label}
 									</p>
-									<p class="text-sm font-semibold text-foreground line-clamp-2">{item.value}</p>
+									<p class="line-clamp-2 text-sm font-semibold text-foreground">{item.value}</p>
 								</div>
 							{/if}
 						{/each}
@@ -255,10 +359,17 @@
 					<!-- Keywords -->
 					{#if extracted?.keywords?.length}
 						<div class="rounded-xl border border-border/30 bg-card p-4">
-							<p class="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Từ khóa</p>
+							<p
+								class="mb-2.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+							>
+								{ui.keywords}
+							</p>
 							<div class="flex flex-wrap gap-1.5">
 								{#each extracted.keywords as kw}
-									<span class="rounded-md border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">{kw}</span>
+									<span
+										class="rounded-md border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+										>{kw}</span
+									>
 								{/each}
 							</div>
 						</div>
@@ -269,16 +380,19 @@
 
 					<!-- Rejection reason -->
 					<div>
-						<label for="rejection" class="mb-2 block text-xs font-bold uppercase tracking-widest text-muted-foreground">
-							Lý do từ chối (bắt buộc nếu không duyệt)
+						<label
+							for="rejection"
+							class="mb-2 block text-xs font-bold tracking-widest text-muted-foreground uppercase"
+						>
+							{ui.rejectionReason}
 						</label>
 						<textarea
 							id="rejection"
 							bind:value={rejectionReason}
-							placeholder="Nhập lý do từ chối hồ sơ..."
+							placeholder={ui.rejectionPlaceholder}
 							rows={3}
 							class="w-full resize-none rounded-xl border border-border/50 bg-background/80 px-4 py-3 text-sm
-								text-foreground placeholder:text-muted-foreground/50 outline-none transition-all
+								text-foreground transition-all outline-none placeholder:text-muted-foreground/50
 								focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
 						></textarea>
 					</div>
@@ -288,30 +402,30 @@
 						<button
 							onclick={() => act(true)}
 							disabled={isActing}
-							class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-extrabold
-								bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20
-								transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+							class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm
+								font-extrabold text-white shadow-lg shadow-emerald-500/20 transition-all
+								hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{#if isActing}
 								<Loader2 size={16} class="animate-spin" />
 							{:else}
 								<CheckCircle size={16} />
 							{/if}
-							Phê duyệt
+							{ui.approve}
 						</button>
 						<button
 							onclick={() => act(false)}
 							disabled={isActing || !rejectionReason.trim()}
-							class="flex flex-1 items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-extrabold
-								bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30
-								transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+							class="flex flex-1 items-center justify-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10
+								py-3.5 text-sm font-extrabold text-destructive transition-all
+								hover:bg-destructive/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
 						>
 							{#if isActing}
 								<Loader2 size={16} class="animate-spin" />
 							{:else}
 								<XCircle size={16} />
 							{/if}
-							Từ chối
+							{ui.reject}
 						</button>
 					</div>
 				</div>
